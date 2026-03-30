@@ -10,7 +10,7 @@
     "test:watch": "vitest",
     "lint": "npm run typecheck",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run build",
+    "prepublishOnly": "npm run build",
     "commit": "cz help",
     "cz": "git add . && cz"
   },
