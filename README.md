@@ -21,7 +21,7 @@ Basic decorator primitives for TypeScript. Writing decorators in TS is hard, thi
 
 ## Description
 
-Zero-dependency TypeScript library that provides low-level primitives for creating decorators. Instead of wrestling with property descriptors and prototype traversal, you define decorator from base hooks:
+Zero-dependency TypeScript library that provides low-level primitives for creating decorators. Instead of wrestling with property descriptors and prototype traversal, you define a decorator from base hooks:
 
 - `onInvoke` — fired before the method runs
 - `onReturn` — fired after the method succeeds
@@ -66,12 +66,12 @@ calc.add(2, 3); // logs arguments and result
 
 ## How It Works
 
-Instead of creating custom property descriptor wrapper, you can simply compose decorator hook to get desired behavior.
+Instead of creating a custom property descriptor wrapper, you can simply compose decorator hooks to get the desired behavior.
 
 ```typescript
 import { Effect } from 'base-decorators';
 
-/** Log function on invoke and return */
+/** Logs on invoke and return */
 const Log = () => Effect({
     onInvoke: ({ args }) => console.log('add called with', args),
     onReturn: ({ result }) => { console.log('result:', result); return result; },
@@ -147,9 +147,9 @@ class Service {
 }
 ```
 
-### Class and Method based decorators
+### Class and Method decorators
 
-`Effect` and all hook decorators can be used on both class and method out of the box.
+`Effect` and all hook decorators can be used on both classes and methods out of the box.
 
 ```typescript
 import { Effect } from 'base-decorators';
@@ -165,15 +165,17 @@ class Service {
 }
 
 // Class-level
-@Log('AnotherService invoked')
+@Log('AnotherService invoked') // automatically applied to all methods
 class AnotherService {
+  // will be logged as "AnotherService invoked"
   methodA() { return 'a'; }
-  @Log('methodB invoked') // will be printed only "methodB invoked"
+  
+  @Log('methodB invoked') // will be logged as "methodB invoked"
   methodB() { return 'b'; }
 }
 ```
 
-Method level decorator takes precedence over class level decorator, to avoid dublicated behaivor. But if you want to have one type of decorator that should be applied on class level, while other applied on method level, you can pass `exclusionKey` to the decorator. This way you can create namespace in which your decorators will be isolated.
+A method-level decorator takes precedence over a class-level decorator to avoid duplicated behavior. If you want one type of decorator applied at class level while another is applied at method level, you can pass `exclusionKey` to the decorator. That way you can create a namespace in which your decorators stay isolated.
 
 #### Incorrect
 
@@ -255,9 +257,9 @@ class Service {
 
 ## Options
 
-### Effect Lifecycle hooks
+### Effect lifecycle hooks
 
-Each hook receives a context object. All hooks are optional. Each have own decorator version.
+Each hook receives a context object. All hooks are optional. Each hook has a corresponding convenience decorator.
 
 | Hook | When it fires | Return value |
 |------|---------------|--------------|
@@ -284,7 +286,7 @@ For `onReturn`, the context also includes `result`. For `onError`, it includes `
 
 ### Exclusion keys
 
-`Effect` and each hook decorator accept an optional `exclusionKey` symbol. This prevents the same method from being wrapped twice when both class-level and method-level decorators are used. You can also mark methods to be skipped with `@SetMeta(exclusionKey, true)`.
+You can pass an optional `exclusionKey` symbol to `Effect` or to any hook decorator. That prevents the same method from being wrapped twice when both class-level and method-level decorators are used. You can also mark methods to skip wrapping with `@SetMeta(exclusionKey, true)`.
 
 ```typescript
 const EXCLUDE = Symbol('exclude');
@@ -300,7 +302,7 @@ class Service {
 
 ### Factory Hooks
 
-In addition to a static hooks object, `Effect` accept a **factory function** that receives the current `HookContext` and returns an `EffectHooks` object. This is useful when you need to decide which hooks (or what behavior) to apply at runtime based on the method being invoked.
+In addition to a static hooks object, `Effect` accepts a **factory function** that receives the current `HookContext` and returns an `EffectHooks` object. This is useful when you need to decide which hooks (or what behavior) to apply at runtime based on the method being invoked.
 
 ```typescript
 import { Effect } from 'base-decorators';
