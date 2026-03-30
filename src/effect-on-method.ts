@@ -11,8 +11,6 @@ import { getParameterNames } from './getParameterNames';
  */
 export const EFFECT_APPLIED_KEY: unique symbol = Symbol('effectApplied');
 
-
-
 /**
  * Method decorator factory that wraps `descriptor.value` with lifecycle hooks.
  *
@@ -66,7 +64,7 @@ export const EffectOnMethod = <R = unknown>(
       const className = (this.constructor as { name: string }).name ?? '';
 
       const context: HookContext = {
-        argsObject: argsObject,
+        argsObject,
         args,
         target: this,
         propertyKey,

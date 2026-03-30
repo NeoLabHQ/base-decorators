@@ -5,7 +5,7 @@ import {
   EFFECT_APPLIED_KEY,
 } from '../src/effect-on-method';
 import { setMeta, getMeta, SetMeta } from '../src/set-meta.decorator';
-import type { EffectHooks } from '../src/set-meta.decorator';
+import type { EffectHooks, OnReturnContext, OnErrorContext } from '../src/hook.types';
 
 describe('EffectOnMethod', () => {
   describe('sync method with all 4 hooks fires in correct order', () => {
@@ -179,7 +179,7 @@ describe('EffectOnMethod', () => {
   describe('onError hook receives the thrown error', () => {
     it('should pass the error to onError hook', () => {
       const testError = new Error('specific error');
-      const onError = vi.fn(({ error }: { error: unknown }) => { throw error; });
+      const onError = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
         @EffectOnMethod({ onError })
@@ -481,7 +481,7 @@ describe('EffectOnMethod', () => {
 
       expect(onInvoke).toHaveBeenCalledOnce();
       const [context] = onInvoke.mock.calls[0];
-      expect(context.args).toEqual({ name: 'Alice', age: 30 });
+      expect(context.argsObject).toEqual({ name: 'Alice', age: 30 });
       expect(context.target).toBe(service);
       expect(context.propertyKey).toBe('greet');
       expect(context.descriptor).toBeDefined();
@@ -489,7 +489,7 @@ describe('EffectOnMethod', () => {
     });
 
     it('should pass correct arguments to onReturn', () => {
-      const onReturn = vi.fn(({ result }: { result: string }) => result);
+      const onReturn = vi.fn((ctx: OnReturnContext<string>) => ctx.result);
 
       class TestService {
         @EffectOnMethod({ onReturn })
@@ -503,7 +503,7 @@ describe('EffectOnMethod', () => {
 
       expect(onReturn).toHaveBeenCalledOnce();
       const [context] = onReturn.mock.calls[0];
-      expect(context.args).toEqual({ name: 'Bob' });
+      expect(context.argsObject).toEqual({ name: 'Bob' });
       expect(context.target).toBe(service);
       expect(context.propertyKey).toBe('greet');
       expect(context.result).toBe('hello Bob');
@@ -512,7 +512,7 @@ describe('EffectOnMethod', () => {
 
     it('should pass correct arguments to onError', () => {
       const testError = new Error('test');
-      const onError = vi.fn(({ error }: { error: unknown }) => { throw error; });
+      const onError = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
         @EffectOnMethod({ onError })
@@ -526,7 +526,7 @@ describe('EffectOnMethod', () => {
 
       expect(onError).toHaveBeenCalledOnce();
       const [context] = onError.mock.calls[0];
-      expect(context.args).toEqual({ input: 'data' });
+      expect(context.argsObject).toEqual({ input: 'data' });
       expect(context.target).toBe(service);
       expect(context.propertyKey).toBe('failing');
       expect(context.error).toBe(testError);
@@ -548,7 +548,7 @@ describe('EffectOnMethod', () => {
 
       expect(finallyHook).toHaveBeenCalledOnce();
       const [context] = finallyHook.mock.calls[0];
-      expect(context.args).toEqual({ name: 'Charlie' });
+      expect(context.argsObject).toEqual({ name: 'Charlie' });
       expect(context.target).toBe(service);
       expect(context.propertyKey).toBe('greet');
       expect(context.descriptor).toBeDefined();
@@ -666,7 +666,7 @@ describe('EffectOnMethod', () => {
 
     it('should attach only .catch when only onError is defined (no onReturn)', async () => {
       const testError = new Error('async error');
-      const onError = vi.fn(({ error }: { error: unknown }) => { throw error; });
+      const onError = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
         @EffectOnMethod({ onError })

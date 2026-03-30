@@ -7,6 +7,10 @@ import type { FinallyHookType } from './hook.types';
  * finalization that must run whether the method succeeded or failed.
  *
  * @param callback - Function called after every method execution
+ * @param exclusionKey - Optional symbol; Methods carrying this
+ *                       metadata are skipped during class-level decoration,
+ *                       and method-level decoration marks methods with this
+ *                       key instead of the default `EFFECT_APPLIED_KEY`.
  * @returns A decorator usable on both classes and methods
  *
  * @example
@@ -19,6 +23,7 @@ import type { FinallyHookType } from './hook.types';
  */
 export const FinallyHook = (
   callback: FinallyHookType,
+  exclusionKey?: symbol
 ): ClassDecorator & MethodDecorator => {
-  return Effect({ finally: callback });
+  return Effect({ finally: callback }, exclusionKey);
 };

@@ -1,12 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { OnErrorHook } from '../src/on-error.hook';
+import type { OnErrorContext } from '../src/hook.types';
 
 describe('OnErrorHook', () => {
   describe('applied to a method', () => {
     it('should fire callback when sync method throws', () => {
       const testError = new Error('sync failure');
-      const callback = vi.fn(({ error }: { error: unknown }) => { throw error; });
+      const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
         @OnErrorHook(callback)
@@ -23,7 +24,7 @@ describe('OnErrorHook', () => {
 
     it('should fire callback when async method rejects', async () => {
       const testError = new Error('async failure');
-      const callback = vi.fn(({ error }: { error: unknown }) => { throw error; });
+      const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
         @OnErrorHook(callback)
@@ -56,7 +57,7 @@ describe('OnErrorHook', () => {
     });
 
     it('should not fire callback when method succeeds', () => {
-      const callback = vi.fn(({ error }: { error: unknown }) => { throw error; });
+      const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
         @OnErrorHook(callback)
@@ -74,7 +75,7 @@ describe('OnErrorHook', () => {
 
     it('should pass args, target, propertyKey, error, and descriptor to callback', () => {
       const testError = new Error('test');
-      const callback = vi.fn(({ error }: { error: unknown }) => { throw error; });
+      const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
         @OnErrorHook(callback)
@@ -87,7 +88,7 @@ describe('OnErrorHook', () => {
       expect(() => service.failing('hello')).toThrow(testError);
 
       const [context] = callback.mock.calls[0];
-      expect(context.args).toEqual({ input: 'hello' });
+      expect(context.argsObject).toEqual({ input: 'hello' });
       expect(context.target).toBe(service);
       expect(context.propertyKey).toBe('failing');
       expect(context.error).toBe(testError);
@@ -100,7 +101,7 @@ describe('OnErrorHook', () => {
     it('should fire callback for errors from any method', () => {
       const testErrorA = new Error('error A');
       const testErrorB = new Error('error B');
-      const callback = vi.fn(({ error }: { error: unknown }) => { throw error; });
+      const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       @OnErrorHook(callback)
       class TestService {

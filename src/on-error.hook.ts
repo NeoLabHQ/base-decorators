@@ -8,6 +8,10 @@ import type { OnErrorHookType } from './hook.types';
  *
  * @typeParam R - The return type of the decorated method
  * @param callback - Function called when the method throws
+ * @param exclusionKey - Optional symbol; Methods carrying this
+ *                       metadata are skipped during class-level decoration,
+ *                       and method-level decoration marks methods with this
+ *                       key instead of the default `EFFECT_APPLIED_KEY`.
  * @returns A decorator usable on both classes and methods
  *
  * @example
@@ -23,6 +27,7 @@ import type { OnErrorHookType } from './hook.types';
  */
 export const OnErrorHook = <R = unknown>(
   callback: OnErrorHookType<R>,
+  exclusionKey?: symbol
 ): ClassDecorator & MethodDecorator => {
-  return Effect<R>({ onError: callback });
+  return Effect<R>({ onError: callback }, exclusionKey);
 };

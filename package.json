@@ -1,7 +1,7 @@
 {
   "name": "base-decorators",
   "version": "0.1.0",
-  "description": "Basic decorator primitives for TypeScript. Writing decorators in TS is hard, this library simplify it.",
+  "description": "Basic decorator primitives for TypeScript. Writing decorators in TS is hard, this library makes it simpler.",
   "scripts": {
     "build": "tsdown",
     "build:watch": "tsdown --watch",

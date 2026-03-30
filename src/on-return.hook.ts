@@ -7,7 +7,11 @@ import type { OnReturnHookType } from './hook.types';
  * result, enabling post-processing or result transformation.
  *
  * @typeParam R - The return type of the decorated method
- * @param callback - Function called after successful return
+ * @param callback - Function called after successful return\
+ * @param exclusionKey - Optional symbol; Methods carrying this
+ *                       metadata are skipped during class-level decoration,
+ *                       and method-level decoration marks methods with this
+ *                       key instead of the default `EFFECT_APPLIED_KEY`.
  * @returns A decorator usable on both classes and methods
  *
  * @example
@@ -23,6 +27,7 @@ import type { OnReturnHookType } from './hook.types';
  */
 export const OnReturnHook = <R = unknown>(
   callback: OnReturnHookType<R>,
+  exclusionKey?: symbol
 ): ClassDecorator & MethodDecorator => {
-  return Effect<R>({ onReturn: callback });
+  return Effect<R>({ onReturn: callback }, exclusionKey);
 };

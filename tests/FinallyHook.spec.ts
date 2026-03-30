@@ -98,7 +98,7 @@ describe('FinallyHook', () => {
       expect(callback).toHaveBeenCalledOnce();
 
       const [context] = callback.mock.calls[0];
-      expect(context.args).toEqual({ a: 1, b: 'test' });
+      expect(context.argsObject).toEqual({ a: 1, b: 'test' });
       expect(context.target).toBe(service);
       expect(context.propertyKey).toBe('doWork');
       expect(context.descriptor).toBeDefined();

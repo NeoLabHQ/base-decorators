@@ -21,11 +21,12 @@ import type { HooksOrFactory } from './hook.types';
  *
  * @typeParam R - The return type expected from lifecycle hooks
  * @param hooks        - Lifecycle callbacks forwarded to the underlying decorator
- * @param exclusionKey - Optional symbol; passed to both {@link EffectOnClass}
- *                       and {@link EffectOnMethod}. Methods carrying this
- *                       metadata are skipped during class-level decoration,
- *                       and method-level decoration marks methods with this
- *                       key instead of the default `EFFECT_APPLIED_KEY`.
+ * @param exclusionKey   - Optional symbol used to mark the wrapped method. When
+ *                         provided, this key is set instead of the default
+ *                         {@link EFFECT_APPLIED_KEY}. This allows different
+ *                         Effect-based decorators (e.g. `@Log`, `@Metrics`) to
+ *                         use independent markers that do not interfere with
+ *                         each other during class-level decoration.
  * @returns A decorator usable on both classes and methods
  *
  * @example
