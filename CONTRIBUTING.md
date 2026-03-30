@@ -2,44 +2,78 @@
 
 Thanks for your interest in contributing to this project! 🎉
 
-## Development Setup
+## Development
 
-1. Fork and clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start development mode:
-   ```bash
-   npm run dev
-   ```
+### Quick Start
 
-## Making Changes
+```bash
+git clone https://github.com/NeoLabHQ/base-decorators.git
+cd base-decorators
+npm install
+npm run dev
+# Will run build and test in watch mode
+```
 
-1. Create a new branch for your feature/fix
-2. Make your changes in the `src/` directory
-3. Build the library to ensure no errors:
-   ```bash
-   npm run build
-   ```
-4. Run type checking:
-   ```bash
-   npm run typecheck
-   ```
+### Testing
 
-## Submitting Changes
+```bash
+npm run test
+```
 
-1. Commit your changes with a clear message
-2. Push to your fork
-3. Open a Pull Request with a description of your changes
+### Linting
 
-## Code Style
+```bash
+npm run lint
+```
 
-- Follow the existing code style
-- Use TypeScript for type safety
-- Add JSDoc comments for public APIs
-- Keep functions simple and focused
+### Building
 
----
+```bash
+npm run build
+```
 
-This project was created with [create-rolldown](https://github.com/sunny-117/create-rolldown)
+## Commits and Releases
+
+This project uses **semantic-release** for automated versioning and changelog generation. All commits must follow the **Conventional Commits** format.
+
+### Commit
+
+Instead of `git commit`, use:
+
+```bash
+git add .
+npm run commit
+```
+
+Or simply
+
+```bash
+# Add all to git and commit with commitizen
+npm run cz
+```
+
+This launches an interactive prompt that guides you through creating a properly formatted commit message.
+
+### Commit Format
+
+```
+<type>(<scope>): <subject>
+
+[optional body]
+
+[optional footer]
+```
+
+**Types:**
+
+- `feat` - New feature (triggers minor version bump)
+- `fix` - Bug fix (triggers patch version bump)
+- `docs` - Documentation changes
+- `style` - Code style changes (formatting, no code change)
+- `refactor` - Code refactoring
+- `perf` - Performance improvements
+- `test` - Adding or updating tests
+- `chore` - Maintenance tasks
+- `ci` - CI/CD changes
+
+**Breaking changes:** Add `BREAKING CHANGE:` in the footer or `!` after type (e.g., `feat!:`) to trigger a major version bump.

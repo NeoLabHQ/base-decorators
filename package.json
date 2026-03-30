@@ -1,30 +1,40 @@
 {
   "name": "base-decorators",
-  "version": "0.0.0",
-  "description": "A starter for creating a TypeScript library with Rolldown.",
+  "version": "0.1.0",
+  "description": "Basic decorator primitives for TypeScript. Writing decorators in TS is hard, this library simplify it.",
+  "scripts": {
+    "build": "tsdown",
+    "build:watch": "tsdown --watch",
+    "dev": "concurrently -c auto --names build,test npm:build:watch npm:test:watch",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "lint": "npm run typecheck",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build",
+    "commit": "cz help",
+    "cz": "git add . && cz"
+  },
   "keywords": [
-    "bundler",
+    "decorator",
+    "decorators",
     "library",
-    "rolldown",
     "typescript",
     "utility"
   ],
-  "homepage": "https://github.com/author/library#readme",
+  "homepage": "https://github.com/NeoLabHQ/base-decorators#readme",
   "bugs": {
-    "url": "https://github.com/author/library/issues"
+    "url": "https://github.com/NeoLabHQ/base-decorators/issues"
   },
-  "license": "MIT",
-  "author": "Author Name <author.name@mail.com>",
+  "license": "AGPL-3.0",
+  "author": "Vlad Goncharov <vlad.goncharov@neolab.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/author/library.git"
+    "url": "git+https://github.com/NeoLabHQ/base-decorators.git"
   },
   "files": [
     "dist"
   ],
-  "type": "module",
   "main": "./dist/index.js",
-  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
@@ -33,15 +43,19 @@
   "publishConfig": {
     "access": "public"
   },
-  "scripts": {
-    "build": "rolldown -c rolldown.config.ts",
-    "dev": "rolldown -c rolldown.config.ts --watch",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run build"
-  },
   "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
     "@types/node": "^25.5.0",
+    "bumpp": "^11.0.1",
+    "concurrently": "^9.2.1",
+    "cz-conventional-changelog": "^3.3.0",
     "rolldown": "1.0.0-rc.10",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
   }
 }
