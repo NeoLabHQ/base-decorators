@@ -781,4 +781,182 @@ describe('EffectOnMethod', () => {
       expect(getMeta<boolean>(METRICS_KEY, finalDescriptor)).toBe(true);
     });
   });
+
+  describe('async onInvoke hook for Promise-returning methods', () => {
+    it('should await sync onInvoke before calling original method', () => {
+      const callOrder: string[] = [];
+
+      class TestService {
+        @EffectOnMethod({
+          onInvoke: () => { callOrder.push('onInvoke'); },
+        })
+        fetchData() {
+          callOrder.push('original');
+          return Promise.resolve('result');
+        }
+      }
+
+      const service = new TestService();
+      service.fetchData();
+
+      expect(callOrder).toEqual(['onInvoke', 'original']);
+    });
+
+    it('should await async onInvoke before calling original method', async () => {
+      const callOrder: string[] = [];
+
+      class TestService {
+        @EffectOnMethod({
+          onInvoke: async () => {
+            callOrder.push('onInvoke-start');
+            await new Promise((r) => setTimeout(r, 10));
+            callOrder.push('onInvoke-end');
+          },
+        })
+        async fetchData() {
+          callOrder.push('original');
+          return 'result';
+        }
+      }
+
+      const service = new TestService();
+      await service.fetchData();
+
+      expect(callOrder).toEqual([
+        'onInvoke-start',
+        'onInvoke-end',
+        'original',
+      ]);
+    });
+
+    it('should propagate async onInvoke error', async () => {
+      const testError = new Error('onInvoke async failure');
+
+      class TestService {
+        @EffectOnMethod({
+          onInvoke: async () => {
+            throw testError;
+          },
+          onError: (ctx) => {
+            throw ctx.error;
+          },
+        })
+        async fetchData() {
+          return 'result';
+        }
+      }
+
+      const service = new TestService();
+      await expect(service.fetchData()).rejects.toThrow(testError);
+    });
+
+    it('should allow async onInvoke with recovery via onError', async () => {
+      const callOrder: string[] = [];
+      const originalMethodCalled = vi.fn();
+
+      class TestService {
+        @EffectOnMethod({
+          onInvoke: async () => {
+            throw new Error('invoke failed');
+          },
+          onError: () => {
+            callOrder.push('onError-recovered');
+            return 'recovered' as unknown;
+          },
+        })
+        async fetchData() {
+          originalMethodCalled();
+          return 'result';
+        }
+      }
+
+      const service = new TestService();
+      const result = await service.fetchData();
+
+      expect(result).toBe('recovered');
+      expect(originalMethodCalled).not.toHaveBeenCalled();
+      expect(callOrder).toEqual(['onError-recovered']);
+    });
+
+    it('should fire all hooks in correct order with async onInvoke', async () => {
+      const callOrder: string[] = [];
+
+      class TestService {
+        @EffectOnMethod({
+          onInvoke: async () => { callOrder.push('async-onInvoke'); },
+          onReturn: ({ result }) => {
+            callOrder.push('onReturn');
+            return result;
+          },
+          finally: () => { callOrder.push('finally'); },
+        })
+        async greet(name: string) {
+          callOrder.push('original');
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new TestService();
+      const result = await service.greet('world');
+
+      expect(result).toBe('hello world');
+      expect(callOrder).toEqual([
+        'async-onInvoke',
+        'original',
+        'onReturn',
+        'finally',
+      ]);
+    });
+
+    it('should handle async onInvoke with async original method error', async () => {
+      const callOrder: string[] = [];
+      const testError = new Error('method failed');
+
+      class TestService {
+        @EffectOnMethod({
+          onInvoke: async () => { callOrder.push('async-onInvoke'); },
+          onError: (ctx) => {
+            callOrder.push('onError');
+            throw ctx.error;
+          },
+          finally: () => { callOrder.push('finally'); },
+        })
+        async greet() {
+          callOrder.push('original');
+          throw testError;
+        }
+      }
+
+      const service = new TestService();
+      await expect(service.greet()).rejects.toThrow(testError);
+      expect(callOrder).toEqual([
+        'async-onInvoke',
+        'original',
+        'onError',
+        'finally',
+      ]);
+    });
+  });
+
+  describe('sync onInvoke unchanged behavior for non-Promise methods', () => {
+    it('should preserve sync-onInvoke behavior for sync methods', () => {
+      const callOrder: string[] = [];
+
+      class TestService {
+        @EffectOnMethod({
+          onInvoke: () => { callOrder.push('onInvoke'); },
+        })
+        greet(name: string) {
+          callOrder.push('original');
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new TestService();
+      const result = service.greet('world');
+
+      expect(result).toBe('hello world');
+      expect(callOrder).toEqual(['onInvoke', 'original']);
+    });
+  });
 });

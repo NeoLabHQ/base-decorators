@@ -40,11 +40,16 @@ export interface OnErrorContext extends HookContext {
 
 /**
  * Hook fired before the original method executes.
- * @typeParam R - The return type of the decorated method (unused, for consistency)
+ *
+ * Accepts both `void` and `Promise<void>` return types. When the
+ * decorated method returns a Promise, the hook may be `async` — its
+ * promise is awaited before the original method executes.
+ *
+ * @typeParam R - The return type of the decorated method
  */
 export type OnInvokeHookType<R = unknown> = (
   context: HookContext,
-) => void;
+) => void | Promise<void>;
 
 /**
  * Hook fired after a successful return. Its return value replaces the method result.
@@ -64,11 +69,14 @@ export type OnErrorHookType<R = unknown> = (
 
 /**
  * Hook fired after both success and error paths, regardless of outcome.
- * @typeParam R - The return type of the decorated method (unused, for consistency)
+ *
+ * Accepts both `void` and `Promise<void>` return types.
+ *
+ * @typeParam R - The return type of the decorated method
  */
 export type FinallyHookType<R = unknown> = (
   context: HookContext,
-) => void;
+) => void | Promise<void>;
 
 /**
  * Lifecycle hooks for method decoration via Effect-based decorators.
