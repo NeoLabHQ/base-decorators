@@ -55,60 +55,257 @@ export const EffectOnMethod = <R = unknown>(
     descriptor: PropertyDescriptor,
   ): PropertyDescriptor => {
     const originalMethod = descriptor.value as (...args: unknown[]) => unknown;
-
-    // Extract parameter names at decoration time (once, not per-call)
     const parameterNames = getParameterNames(originalMethod);
 
+    const invocation = createMethodInvocation<R>(
+      originalMethod,
+      parameterNames,
+      hooksOrFactory,
+      propertyKey,
+      descriptor,
+    );
+
     const wrapped = function (this: object, ...args: unknown[]): unknown {
-      const argsObject = buildArgsObject(parameterNames, args);
-      const className = (this.constructor as { name: string }).name ?? '';
-
-      const context: HookContext = {
-        argsObject,
-        args,
-        target: this,
-        propertyKey,
-        descriptor,
-        parameterNames,
-        className,
-      };
-
-      const hooks = resolveHooks(hooksOrFactory, context);
-
-      const runMethod = (): unknown => {
-        try {
-          const result = originalMethod.apply(this, args);
-
-          if (result instanceof Promise) {
-            return chainAsyncHooks(result as Promise<UnwrapPromise<R>>, context, hooks);
-          }
-
-          // If an error occurs in the onReturn hook, `finally` will be triggered 2 times.
-          // Intentional architecture choice due to TS limitations
-          return handleSyncSuccess(result as R, context, hooks);
-        } catch (error: unknown) {
-          return handleSyncError(error, context, hooks);
-        }
-      };
-
-      if (hooks.onInvoke) {
-        const invokeResult = hooks.onInvoke(context);
-        if (invokeResult instanceof Promise) {
-          return invokeResult.then(() => runMethod());
-        }
-      }
-
-      return runMethod();
+      return invocation.invoke(this, args);
     };
 
     copySymMeta(originalMethod, wrapped);
 
     descriptor.value = wrapped;
-
     setMeta(exclusionKey, true, descriptor);
 
     return descriptor;
   };
+};
+
+/**
+ * Encapsulates the runtime behavior of a single decorated method invocation.
+ */
+interface MethodInvocation<R> {
+  /** Executes the decorated method with the given `this` and arguments. */
+  invoke(self: object, args: unknown[]): unknown;
+}
+
+/**
+ * Creates a {@link MethodInvocation} that captures all decoration-time state
+ * (original method, parameter names, hooks) and produces the invocation function.
+ *
+ * This separates decoration-time concerns from runtime execution concerns.
+ */
+const createMethodInvocation = <R>(
+  originalMethod: Function,
+  parameterNames: string[],
+  hooksOrFactory: HooksOrFactory<R>,
+  propertyKey: string | symbol,
+  descriptor: PropertyDescriptor,
+): MethodInvocation<R> => {
+  const buildContext = createContextBuilder(parameterNames, propertyKey, descriptor);
+
+  return {
+    invoke(self, args) {
+      const context = buildContext(self, args);
+      const hooks = resolveHooks(hooksOrFactory, context);
+
+      if (!hooks.onInvoke) {
+        return runWithSyncPipeline(originalMethod, context, hooks);
+      }
+
+      const invokeResult = hooks.onInvoke(context);
+
+      if (invokeResult instanceof Promise) {
+        return invokeResult.then(() => runWithSyncPipeline(originalMethod, context, hooks));
+      }
+
+      return runWithSyncPipeline(originalMethod, context, hooks);
+    },
+  };
+};
+
+/**
+ * Builds a function that constructs a {@link HookContext} for each call.
+ *
+ * The builder is created once at decoration time and reuses the cached
+ * parameter names and descriptor.
+ */
+const createContextBuilder = (
+  parameterNames: string[],
+  propertyKey: string | symbol,
+  descriptor: PropertyDescriptor,
+): ((self: object, args: unknown[]) => HookContext) => {
+  return (self, args) => {
+    const argsObject = buildArgsObject(parameterNames, args);
+    const className = (self.constructor as { name: string }).name ?? '';
+
+    return {
+      argsObject,
+      args,
+      target: self,
+      propertyKey,
+      descriptor,
+      parameterNames,
+      className,
+    };
+  };
+};
+
+/**
+ * Resolves hooks from a static object or a factory function.
+ *
+ * When `hooksOrFactory` is a function, it is called with the provided
+ * context to produce the hooks. Otherwise, the static hooks are returned.
+ */
+const resolveHooks = <R>(
+  hooksOrFactory: HooksOrFactory<R>,
+  context: HookContext,
+): EffectHooks<R> => {
+  if (typeof hooksOrFactory === 'function') {
+    return hooksOrFactory(context);
+  }
+  return hooksOrFactory;
+};
+
+/**
+ * Pipeline interface for applying lifecycle hooks to a synchronous outcome.
+ */
+interface SyncHookPipeline<R> {
+  /** Transforms a successful result through `onReturn` (if defined). */
+  success(value: R): MaybeAsync<R>;
+
+  /** Transforms an error through `onError` (if defined) or re-throws. */
+  error(err: unknown): MaybeAsync<R>;
+
+  /** Runs the `finally` hook (if defined). */
+  cleanup(): void;
+}
+
+/**
+ * Pipeline interface for applying lifecycle hooks to an asynchronous outcome.
+ */
+interface AsyncHookPipeline<R> {
+  /** Transforms a successful result through `onReturn` (if defined). */
+  success(value: UnwrapPromise<R>): UnwrapPromise<R> | Promise<UnwrapPromise<R>>;
+
+  /** Transforms an error through `onError` (if defined) or re-throws. */
+  error(err: unknown): UnwrapPromise<R> | Promise<UnwrapPromise<R>>;
+
+  /** Runs the `finally` hook (if defined). */
+  cleanup(): Promise<void>;
+}
+
+/**
+ * Creates a sync pipeline that applies hooks without creating promises.
+ */
+const createSyncPipeline = <R>(
+  context: HookContext,
+  hooks: EffectHooks<R>,
+): SyncHookPipeline<R> => ({
+  success(value) {
+    return hooks.onReturn
+      ? (hooks.onReturn({ ...context, result: value as UnwrapPromise<R> }) as MaybeAsync<R>)
+      : (value as MaybeAsync<R>);
+  },
+  error(err) {
+    if (hooks.onError) {
+      return hooks.onError({ ...context, error: err }) as MaybeAsync<R>;
+    }
+    throw err;
+  },
+  cleanup() {
+    if (hooks.finally) {
+      hooks.finally(context);
+    }
+  },
+});
+
+/**
+ * Creates an async pipeline that applies hooks inside an async boundary.
+ */
+const createAsyncPipeline = <R>(
+  context: HookContext,
+  hooks: EffectHooks<R>,
+): AsyncHookPipeline<R> => ({
+  success(value) {
+    if (hooks.onReturn) {
+      return hooks.onReturn({ ...context, result: value }) as UnwrapPromise<R>;
+    }
+    return value;
+  },
+  error(err) {
+    if (hooks.onError) {
+      return hooks.onError({ ...context, error: err }) as UnwrapPromise<R>;
+    }
+    throw err;
+  },
+  async cleanup() {
+    if (hooks.finally) {
+      await hooks.finally(context);
+    }
+  },
+});
+
+/**
+ * Executes the original method and routes the outcome through the sync pipeline.
+ *
+ * If the method returns a Promise, delegates to the async execution path
+ * while preserving the promise-optimization fast path.
+ */
+const runWithSyncPipeline = <R>(
+  originalMethod: Function,
+  context: HookContext,
+  hooks: EffectHooks<R>,
+): unknown => {
+  const pipeline = createSyncPipeline<R>(context, hooks);
+
+  try {
+    const result = originalMethod.apply(context.target, context.args);
+
+    if (result instanceof Promise) {
+      return runWithAsyncPipeline(result as Promise<UnwrapPromise<R>>, context, hooks);
+    }
+
+    try {
+      return pipeline.success(result as R);
+    } catch (error) {
+      return pipeline.error(error);
+    } finally {
+      pipeline.cleanup();
+    }
+  } catch (error) {
+    try {
+      return pipeline.error(error);
+    } finally {
+      pipeline.cleanup();
+    }
+  }
+};
+
+/**
+ * Executes async hooks for a Promise-returning method.
+ *
+ * Preserves the fast path that returns the original promise unchanged
+ * when no async lifecycle hooks are present.
+ */
+const runWithAsyncPipeline = <R>(
+  promise: Promise<UnwrapPromise<R>>,
+  context: HookContext,
+  hooks: EffectHooks<R>,
+): Promise<UnwrapPromise<R>> => {
+  if (!hooks.onReturn && !hooks.onError && !hooks.finally) {
+    return promise;
+  }
+
+  const pipeline = createAsyncPipeline<R>(context, hooks);
+
+  return (async () => {
+    try {
+      const value = await promise;
+      return await pipeline.success(value);
+    } catch (error) {
+      return await pipeline.error(error);
+    } finally {
+      await pipeline.cleanup();
+    }
+  })();
 };
 
 /**
@@ -177,125 +374,4 @@ const copySymMeta = (
   sourceMap.forEach((value, key) => {
     targetMap.set(key, value);
   });
-};
-
-/**
- * Resolves hooks from a static object or factory function.
- *
- * When `hooksOrFactory` is a function, it is called with the provided
- * context to produce the hooks. Otherwise, the static hooks are returned.
- */
-const resolveHooks = <R>(
-  hooksOrFactory: HooksOrFactory<R>,
-  context: HookContext,
-): EffectHooks<R> => {
-  if (typeof hooksOrFactory === 'function') {
-    return hooksOrFactory(context);
-  }
-  return hooksOrFactory;
-};
-
-/**
- * Runs a callback and ensures `finally` hook is invoked afterwards.
- *
- * Extracted to avoid duplicating the `try...finally` wrapper in both
- * success and error handlers.
- */
-const runWithFinally = <R>(
-  fn: () => MaybeAsync<R>,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): MaybeAsync<R> => {
-  try {
-    return fn();
-  } finally {
-    if (hooks.finally) {
-      hooks.finally(context);
-    }
-  }
-};
-
-/**
- * Handles the synchronous success + finally path.
- *
- * Separated to keep the main decorator body within line limits.
- */
-const handleSyncSuccess = <R>(
-  result: R,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): MaybeAsync<R> => {
-  return runWithFinally(() => {
-    return hooks.onReturn
-      ? (hooks.onReturn({ ...context, result: result as UnwrapPromise<R> }) as MaybeAsync<R>)
-      : (result as MaybeAsync<R>);
-  }, context, hooks);
-};
-
-/**
- * Handles the synchronous error + finally path.
- *
- * Separated to keep the main decorator body within line limits.
- */
-const handleSyncError = <R>(
-  error: unknown,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): MaybeAsync<R> => {
-  return runWithFinally(() => {
-    if (hooks.onError) {
-      return hooks.onError({ ...context, error }) as MaybeAsync<R>;
-    }
-
-    throw error;
-  }, context, hooks);
-};
-
-/**
- * Chains promise lifecycle hooks for asynchronous method execution.
- *
- * Uses `.then` / `.catch` / `.finally` on the returned promise so that
- * `onReturn` fires after resolution, `onError` fires after rejection,
- * and `finally` always fires last.
- */
-const chainAsyncHooks = <R>(
-  promise: Promise<UnwrapPromise<R>>,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): Promise<UnwrapPromise<R>> => {
-  let chained = promise;
-
-  if (hooks.onReturn) {
-    chained = chained.then((value) => {
-      return hooks.onReturn!({ ...context, result: value as UnwrapPromise<R> });
-    }) as Promise<UnwrapPromise<R>>;
-  }
-
-  if (hooks.onError) {
-    chained = chained.catch((error: unknown) => {
-      return hooks.onError!({ ...context, error });
-    }) as Promise<UnwrapPromise<R>>;
-  }
-
-  if (hooks.finally) {
-    const finallyHook = hooks.finally;
-    chained = chained.then(
-      (value) => {
-        const finallyResult = finallyHook(context);
-        if (finallyResult instanceof Promise) {
-          return finallyResult.then(() => value);
-        }
-        return value;
-      },
-      (error) => {
-        const finallyResult = finallyHook(context);
-        if (finallyResult instanceof Promise) {
-          return finallyResult.then(() => { throw error; });
-        }
-        throw error;
-      },
-    ) as Promise<UnwrapPromise<R>>;
-  }
-
-  return chained;
 };
