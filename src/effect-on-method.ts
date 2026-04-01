@@ -1,5 +1,5 @@
 import { setMeta, SYM_META_PROP } from './set-meta.decorator';
-import type { EffectHooks, HookContext, HooksOrFactory } from './hook.types';
+import type { EffectHooks, HookContext, HooksOrFactory, MaybeAsync, UnwrapPromise } from './hook.types';
 import { getParameterNames } from './getParameterNames';
 
 /**
@@ -75,23 +75,30 @@ export const EffectOnMethod = <R = unknown>(
 
       const hooks = resolveHooks(hooksOrFactory, context);
 
-      if (hooks.onInvoke) {
-        hooks.onInvoke(context);
-      }
+      const runMethod = (): unknown => {
+        try {
+          const result = originalMethod.apply(this, args);
 
-      try {
-        const result = originalMethod.apply(this, args);
+          if (result instanceof Promise) {
+            return chainAsyncHooks(result as Promise<UnwrapPromise<R>>, context, hooks);
+          }
 
-        if (result instanceof Promise) {
-          return chainAsyncHooks(result as Promise<R>, context, hooks);
+          // If an error occurs in the onReturn hook, `finally` will be triggered 2 times.
+          // Intentional architecture choice due to TS limitations
+          return handleSyncSuccess(result as R, context, hooks);
+        } catch (error: unknown) {
+          return handleSyncError(error, context, hooks);
         }
+      };
 
-        // If an error occurs in the onReturn hook, `finally` will be triggered 2 times.
-        // Intentional architecture choice due to TS limitations
-        return handleSyncSuccess(result as R, context, hooks);
-      } catch (error: unknown) {
-        return handleSyncError(error, context, hooks);
+      if (hooks.onInvoke) {
+        const invokeResult = hooks.onInvoke(context);
+        if (invokeResult instanceof Promise) {
+          return invokeResult.then(() => runMethod());
+        }
       }
+
+      return runMethod();
     };
 
     copySymMeta(originalMethod, wrapped);
@@ -189,6 +196,26 @@ const resolveHooks = <R>(
 };
 
 /**
+ * Runs a callback and ensures `finally` hook is invoked afterwards.
+ *
+ * Extracted to avoid duplicating the `try...finally` wrapper in both
+ * success and error handlers.
+ */
+const runWithFinally = <R>(
+  fn: () => MaybeAsync<R>,
+  context: HookContext,
+  hooks: EffectHooks<R>,
+): MaybeAsync<R> => {
+  try {
+    return fn();
+  } finally {
+    if (hooks.finally) {
+      hooks.finally(context);
+    }
+  }
+};
+
+/**
  * Handles the synchronous success + finally path.
  *
  * Separated to keep the main decorator body within line limits.
@@ -197,16 +224,12 @@ const handleSyncSuccess = <R>(
   result: R,
   context: HookContext,
   hooks: EffectHooks<R>,
-): R => {
-  try {
+): MaybeAsync<R> => {
+  return runWithFinally(() => {
     return hooks.onReturn
-      ? hooks.onReturn({ ...context, result })
-      : result;
-  } finally {
-    if (hooks.finally) {
-      hooks.finally(context);
-    }
-  }
+      ? (hooks.onReturn({ ...context, result: result as UnwrapPromise<R> }) as MaybeAsync<R>)
+      : (result as MaybeAsync<R>);
+  }, context, hooks);
 };
 
 /**
@@ -218,18 +241,14 @@ const handleSyncError = <R>(
   error: unknown,
   context: HookContext,
   hooks: EffectHooks<R>,
-): R => {
-  try {
+): MaybeAsync<R> => {
+  return runWithFinally(() => {
     if (hooks.onError) {
-      return hooks.onError({ ...context, error });
+      return hooks.onError({ ...context, error }) as MaybeAsync<R>;
     }
 
     throw error;
-  } finally {
-    if (hooks.finally) {
-      hooks.finally(context);
-    }
-  }
+  }, context, hooks);
 };
 
 /**
@@ -240,28 +259,42 @@ const handleSyncError = <R>(
  * and `finally` always fires last.
  */
 const chainAsyncHooks = <R>(
-  promise: Promise<R>,
+  promise: Promise<UnwrapPromise<R>>,
   context: HookContext,
   hooks: EffectHooks<R>,
-): Promise<R> => {
+): Promise<UnwrapPromise<R>> => {
   let chained = promise;
 
   if (hooks.onReturn) {
     chained = chained.then((value) => {
-      return hooks.onReturn!({ ...context, result: value });
-    });
+      return hooks.onReturn!({ ...context, result: value as UnwrapPromise<R> });
+    }) as Promise<UnwrapPromise<R>>;
   }
 
   if (hooks.onError) {
     chained = chained.catch((error: unknown) => {
       return hooks.onError!({ ...context, error });
-    });
+    }) as Promise<UnwrapPromise<R>>;
   }
 
   if (hooks.finally) {
-    chained = chained.finally(() => {
-      hooks.finally!(context);
-    });
+    const finallyHook = hooks.finally;
+    chained = chained.then(
+      (value) => {
+        const finallyResult = finallyHook(context);
+        if (finallyResult instanceof Promise) {
+          return finallyResult.then(() => value);
+        }
+        return value;
+      },
+      (error) => {
+        const finallyResult = finallyHook(context);
+        if (finallyResult instanceof Promise) {
+          return finallyResult.then(() => { throw error; });
+        }
+        throw error;
+      },
+    ) as Promise<UnwrapPromise<R>>;
   }
 
   return chained;

@@ -26,10 +26,16 @@ export interface HookContext {
   descriptor: PropertyDescriptor;
 }
 
+/** Extracts the resolved type from a Promise, or returns the type itself. */
+export type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
+
+/** Allows a Promise return only when the original type is already a Promise. */
+export type MaybeAsync<T> = T extends Promise<infer U> ? U | Promise<U> : T;
+
 /** Context for the onReturn hook, adding the method result. */
 export interface OnReturnContext<R = unknown> extends HookContext {
-  /** The value returned by the original method. */
-  result: R;
+  /** The value returned by the original method (unwrapped if it was a Promise). */
+  result: UnwrapPromise<R>;
 }
 
 /** Context for the onError hook, adding the thrown error. */
@@ -40,35 +46,39 @@ export interface OnErrorContext extends HookContext {
 
 /**
  * Hook fired before the original method executes.
- * @typeParam R - The return type of the decorated method (unused, for consistency)
+ * @typeParam R - The return type of the decorated method. When it extends Promise,
+ *                 the hook may also return a Promise.
  */
 export type OnInvokeHookType<R = unknown> = (
   context: HookContext,
-) => void;
+) => R extends Promise<unknown> ? void | Promise<void> : void;
 
 /**
  * Hook fired after a successful return. Its return value replaces the method result.
- * @typeParam R - The return type of the decorated method
+ * @typeParam R - The return type of the decorated method. When it extends Promise,
+ *                 the hook may also return a Promise of the resolved type.
  */
 export type OnReturnHookType<R = unknown> = (
   context: OnReturnContext<R>,
-) => R;
+) => MaybeAsync<R>;
 
 /**
  * Hook fired when the method throws. May return a recovery value or re-throw.
- * @typeParam R - The return type of the decorated method
+ * @typeParam R - The return type of the decorated method. When it extends Promise,
+ *                 the hook may also return a Promise of the resolved type.
  */
 export type OnErrorHookType<R = unknown> = (
   context: OnErrorContext,
-) => R;
+) => MaybeAsync<R>;
 
 /**
  * Hook fired after both success and error paths, regardless of outcome.
- * @typeParam R - The return type of the decorated method (unused, for consistency)
+ * @typeParam R - The return type of the decorated method. When it extends Promise,
+ *                 the hook may also return a Promise.
  */
 export type FinallyHookType<R = unknown> = (
   context: HookContext,
-) => void;
+) => R extends Promise<unknown> ? void | Promise<void> : void;
 
 /**
  * Lifecycle hooks for method decoration via Effect-based decorators.

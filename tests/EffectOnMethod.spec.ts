@@ -693,6 +693,235 @@ describe('EffectOnMethod', () => {
     });
   });
 
+  describe('async hooks support', () => {
+    it('should wait for async onInvoke before executing async method', async () => {
+      const callOrder: string[] = [];
+
+      const hooks: EffectHooks<Promise<string>> = {
+        onInvoke: async () => {
+          callOrder.push('onInvoke-start');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          callOrder.push('onInvoke-end');
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        async greet(name: string) {
+          callOrder.push('original');
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new TestService();
+      const result = await service.greet('world');
+
+      expect(result).toBe('hello world');
+      expect(callOrder).toEqual(['onInvoke-start', 'onInvoke-end', 'original']);
+    });
+
+    it('should wait for async onReturn and replace async method result', async () => {
+      const hooks: EffectHooks<Promise<string>> = {
+        onReturn: async ({ result }) => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return `${result}-async`;
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        async greet(name: string) {
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new TestService();
+      const result = await service.greet('world');
+
+      expect(result).toBe('hello world-async');
+    });
+
+    it('should allow async onError to return recovery value', async () => {
+      const hooks: EffectHooks<Promise<string>> = {
+        onError: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return 'recovered-async';
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        async failing() {
+          throw new Error('fail');
+        }
+      }
+
+      const service = new TestService();
+      const result = await service.failing();
+
+      expect(result).toBe('recovered-async');
+    });
+
+    it('should wait for async finally on success', async () => {
+      const callOrder: string[] = [];
+
+      const hooks: EffectHooks<Promise<string>> = {
+        finally: async () => {
+          callOrder.push('finally-start');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          callOrder.push('finally-end');
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        async greet(name: string) {
+          callOrder.push('original');
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new TestService();
+      const result = await service.greet('world');
+
+      expect(result).toBe('hello world');
+      expect(callOrder).toEqual(['original', 'finally-start', 'finally-end']);
+    });
+
+    it('should wait for async finally on error', async () => {
+      const callOrder: string[] = [];
+
+      const hooks: EffectHooks<Promise<string>> = {
+        finally: async () => {
+          callOrder.push('finally-start');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          callOrder.push('finally-end');
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        async failing() {
+          callOrder.push('original');
+          throw new Error('fail');
+        }
+      }
+
+      const service = new TestService();
+      await expect(service.failing()).rejects.toThrow('fail');
+      expect(callOrder).toEqual(['original', 'finally-start', 'finally-end']);
+    });
+
+    it('should trigger finally when async onError re-throws on rejection path', async () => {
+      const callOrder: string[] = [];
+      const testError = new Error('original error');
+
+      const hooks: EffectHooks<Promise<string>> = {
+        onError: async ({ error }) => {
+          callOrder.push('onError-start');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          callOrder.push('onError-end');
+          throw error;
+        },
+        finally: () => {
+          callOrder.push('finally');
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        async failing() {
+          callOrder.push('original');
+          throw testError;
+        }
+      }
+
+      const service = new TestService();
+      await expect(service.failing()).rejects.toThrow(testError);
+      expect(callOrder).toEqual(['original', 'onError-start', 'onError-end', 'finally']);
+    });
+
+    it('should execute all async hooks in correct order', async () => {
+      const callOrder: string[] = [];
+
+      const hooks: EffectHooks<Promise<string>> = {
+        onInvoke: async () => {
+          callOrder.push('onInvoke');
+        },
+        onReturn: async ({ result }) => {
+          callOrder.push('onReturn');
+          return result;
+        },
+        onError: async ({ error }) => {
+          callOrder.push('onError');
+          throw error;
+        },
+        finally: async () => {
+          callOrder.push('finally');
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        async greet(name: string) {
+          callOrder.push('original');
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new TestService();
+      await service.greet('world');
+
+      expect(callOrder).toEqual(['onInvoke', 'original', 'onReturn', 'finally']);
+    });
+
+    it('should propagate async onInvoke rejection without calling method', async () => {
+      const invokeError = new Error('async onInvoke failed');
+      const callOrder: string[] = [];
+
+      const hooks: EffectHooks<Promise<string>> = {
+        onInvoke: async () => {
+          callOrder.push('onInvoke');
+          throw invokeError;
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        async greet() {
+          callOrder.push('original');
+          return 'hello';
+        }
+      }
+
+      const service = new TestService();
+      await expect(service.greet()).rejects.toThrow(invokeError);
+      expect(callOrder).toEqual(['onInvoke']);
+    });
+
+    it('should turn sync method into Promise when onInvoke is async', async () => {
+      const hooks: EffectHooks<string> = {
+        onInvoke: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        },
+      };
+
+      class TestService {
+        @EffectOnMethod(hooks)
+        greet() {
+          return 'hello';
+        }
+      }
+
+      const service = new TestService();
+      const result = service.greet();
+
+      expect(result).toBeInstanceOf(Promise);
+      expect(await result).toBe('hello');
+    });
+
+  });
+
   describe('exclusionKey parameter', () => {
     it('should mark method with EFFECT_APPLIED_KEY by default', () => {
       class TestService {
