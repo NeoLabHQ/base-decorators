@@ -147,6 +147,64 @@ class Service {
 }
 ```
 
+### Async hooks
+
+When the decorated method returns a `Promise`, all hooks may optionally return a `Promise` as well. `onReturn` receives the **unwrapped** resolved value, and the library automatically chains the returned promise so async hooks execute in the correct order.
+
+```typescript
+import { Effect } from 'base-decorators';
+
+const DelayedLog = () => Effect({
+  // Returning a Promise delays the original method
+  onInvoke: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    console.log('starting...');
+  },
+
+  // `result` is the unwrapped string, not Promise<string>
+  onReturn: async ({ result }) => {
+    console.log('done:', result);
+    return `${result} (modified)`;
+  },
+});
+
+class Service {
+  @DelayedLog()
+  async greet(name: string): Promise<string> {
+    return `Hello, ${name}`;
+  }
+}
+
+const service = new Service();
+const value = await service.greet('World');
+// "Hello, World (modified)"
+```
+
+Async `onError` and `finally` hooks work the same way. Here, an async `finally` flushes a log buffer after every call:
+
+```typescript
+import { Effect } from 'base-decorators';
+
+const buffer: string[] = [];
+
+const FlushAfterCall = () => Effect({
+  onInvoke: ({ args }) => {
+    buffer.push('invoke: ' + String(args));
+  },
+  finally: async () => {
+    await fetch('/log', { method: 'POST', body: JSON.stringify(buffer) });
+    buffer.length = 0;
+  },
+});
+
+class Worker {
+  @FlushAfterCall()
+  async doWork(id: number): Promise<void> {
+    // async work
+  }
+}
+```
+
 ### Class and Method decorators
 
 `Effect` and all hook decorators can be used on both classes and methods out of the box.
