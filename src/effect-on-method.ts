@@ -1,5 +1,5 @@
 import { setMeta, SYM_META_PROP } from './set-meta.decorator';
-import type { EffectHooks, HookContext, HooksOrFactory, MaybeAsync, UnwrapPromise } from './hook.types';
+import type { EffectHooks, HookContext, HooksOrFactory, UnwrapPromise } from './hook.types';
 import { getParameterNames } from './getParameterNames';
 
 /**
@@ -75,30 +75,46 @@ export const EffectOnMethod = <R = unknown>(
 
       const hooks = resolveHooks(hooksOrFactory, context);
 
-      const runMethod = (): unknown => {
+      // Executes the original method and applies sync/async lifecycle hooks.
+      // Kept as a closure so async onInvoke can defer execution via .then().
+      // finally kept inline to avoid double-calling when onReturn or onError throw.
+      const executeMethod = (): unknown => {
         try {
           const result = originalMethod.apply(this, args);
 
           if (result instanceof Promise) {
-            return chainAsyncHooks(result as Promise<UnwrapPromise<R>>, context, hooks);
+            return chainAsyncHooks(result, context, hooks);
           }
 
-          // If an error occurs in the onReturn hook, `finally` will be triggered 2 times.
-          // Intentional architecture choice due to TS limitations
-          return handleSyncSuccess(result as R, context, hooks);
+          try {
+            return hooks.onReturn
+              ? hooks.onReturn({ ...context, result: result as UnwrapPromise<R> })
+              : result;
+          } finally {
+            hooks.finally?.(context);
+          }
         } catch (error: unknown) {
-          return handleSyncError(error, context, hooks);
-        }
+          try {
+            if (hooks.onError) {
+              return hooks.onError({ ...context, error });
+            }
+
+            throw error;
+          } finally {
+            hooks.finally?.(context);
+          }
+        } 
       };
 
       if (hooks.onInvoke) {
         const invokeResult = hooks.onInvoke(context);
+
         if (invokeResult instanceof Promise) {
-          return invokeResult.then(() => runMethod());
+          return invokeResult.then(executeMethod);
         }
       }
 
-      return runMethod();
+      return executeMethod();
     };
 
     copySymMeta(originalMethod, wrapped);
@@ -119,7 +135,7 @@ export const EffectOnMethod = <R = unknown>(
  *
  * @param parameterNames - Array of parameter names
  * @param args - Array of argument values
- * @returns Object mapping parameter names to values
+ * @returns Object mapping parameter names to values, or undefined when empty
  *
  * @example
  * buildArgsObject(['id', 'name'], [1, 'John'])
@@ -127,7 +143,10 @@ export const EffectOnMethod = <R = unknown>(
  *
  * @internal
  */
-export const buildArgsObject = (parameterNames: string[], args: unknown[]): Record<string, unknown> | undefined => {
+export const buildArgsObject = (
+  parameterNames: string[],
+  args: unknown[],
+): Record<string, unknown> | undefined => {
   if (args.length === 0 && parameterNames.length === 0) {
     return undefined;
   }
@@ -151,10 +170,7 @@ export const buildArgsObject = (parameterNames: string[], args: unknown[]): Reco
  * or `@NoLog`) must survive on the new wrapper so downstream consumers
  * (like `EffectOnClass`) can still read it.
  */
-const copySymMeta = (
-  source: Function,
-  target: Function,
-): void => {
+const copySymMeta = (source: Function, target: Function): void => {
   const sourceRecord = source as unknown as Record<string, unknown>;
   const sourceMap = sourceRecord[SYM_META_PROP] as
     | Map<symbol, unknown>
@@ -174,9 +190,7 @@ const copySymMeta = (
   }
 
   const targetMap = targetRecord[SYM_META_PROP] as Map<symbol, unknown>;
-  sourceMap.forEach((value, key) => {
-    targetMap.set(key, value);
-  });
+  sourceMap.forEach((value, key) => targetMap.set(key, value));
 };
 
 /**
@@ -196,106 +210,31 @@ const resolveHooks = <R>(
 };
 
 /**
- * Runs a callback and ensures `finally` hook is invoked afterwards.
+ * Applies lifecycle hooks (onReturn, onError, finally) to an async method result.
  *
- * Extracted to avoid duplicating the `try...finally` wrapper in both
- * success and error handlers.
+ * Uses async/await with try/catch/finally so that onReturn fires after
+ * resolution, onError fires after rejection, and finally always fires last.
  */
-const runWithFinally = <R>(
-  fn: () => MaybeAsync<R>,
+const chainAsyncHooks = async <R>(
+  promise: Promise<unknown>,
   context: HookContext,
   hooks: EffectHooks<R>,
-): MaybeAsync<R> => {
+): Promise<unknown> => {
   try {
-    return fn();
+    const value = await promise;
+
+    return hooks.onReturn
+      ? await hooks.onReturn({ ...context, result: value as UnwrapPromise<R> })
+      : value;
+  } catch (error: unknown) {
+    if (hooks.onError) {
+      return await hooks.onError({ ...context, error });
+    }
+    
+    throw error;
   } finally {
     if (hooks.finally) {
-      hooks.finally(context);
+      await hooks.finally(context);
     }
   }
-};
-
-/**
- * Handles the synchronous success + finally path.
- *
- * Separated to keep the main decorator body within line limits.
- */
-const handleSyncSuccess = <R>(
-  result: R,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): MaybeAsync<R> => {
-  return runWithFinally(() => {
-    return hooks.onReturn
-      ? (hooks.onReturn({ ...context, result: result as UnwrapPromise<R> }) as MaybeAsync<R>)
-      : (result as MaybeAsync<R>);
-  }, context, hooks);
-};
-
-/**
- * Handles the synchronous error + finally path.
- *
- * Separated to keep the main decorator body within line limits.
- */
-const handleSyncError = <R>(
-  error: unknown,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): MaybeAsync<R> => {
-  return runWithFinally(() => {
-    if (hooks.onError) {
-      return hooks.onError({ ...context, error }) as MaybeAsync<R>;
-    }
-
-    throw error;
-  }, context, hooks);
-};
-
-/**
- * Chains promise lifecycle hooks for asynchronous method execution.
- *
- * Uses `.then` / `.catch` / `.finally` on the returned promise so that
- * `onReturn` fires after resolution, `onError` fires after rejection,
- * and `finally` always fires last.
- */
-const chainAsyncHooks = <R>(
-  promise: Promise<UnwrapPromise<R>>,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): Promise<UnwrapPromise<R>> => {
-  let chained = promise;
-
-  if (hooks.onReturn) {
-    chained = chained.then((value) => {
-      return hooks.onReturn!({ ...context, result: value as UnwrapPromise<R> });
-    }) as Promise<UnwrapPromise<R>>;
-  }
-
-  if (hooks.onError) {
-    chained = chained.catch((error: unknown) => {
-      return hooks.onError!({ ...context, error });
-    }) as Promise<UnwrapPromise<R>>;
-  }
-
-  if (hooks.finally) {
-    const finallyHook = hooks.finally;
-    chained = chained.then(
-      (value) => {
-        const finallyResult = finallyHook(context);
-        if (finallyResult instanceof Promise) {
-          return finallyResult.then(() => value);
-        }
-        return value;
-      },
-      (error) => {
-        const finallyResult = finallyHook(context);
-        if (finallyResult instanceof Promise) {
-          return finallyResult.then(() => { throw error; });
-        }
-        throw error;
-      },
-    ) as Promise<UnwrapPromise<R>>;
-  }
-
-  return chained;
 };
