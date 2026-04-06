@@ -1,5 +1,5 @@
 import { setMeta, SYM_META_PROP } from './set-meta.decorator';
-import type { EffectHooks, HookContext, HooksOrFactory } from './hook.types';
+import type { EffectHooks, HookContext, HooksOrFactory, UnwrapPromise } from './hook.types';
 import { getParameterNames } from './getParameterNames';
 
 /**
@@ -59,40 +59,13 @@ export const EffectOnMethod = <R = unknown>(
     // Extract parameter names at decoration time (once, not per-call)
     const parameterNames = getParameterNames(originalMethod);
 
-    const wrapped = function (this: object, ...args: unknown[]): unknown {
-      const argsObject = buildArgsObject(parameterNames, args);
-      const className = (this.constructor as { name: string }).name ?? '';
-
-      const context: HookContext = {
-        argsObject,
-        args,
-        target: this,
-        propertyKey,
-        descriptor,
-        parameterNames,
-        className,
-      };
-
-      const hooks = resolveHooks(hooksOrFactory, context);
-
-      if (hooks.onInvoke) {
-        hooks.onInvoke(context);
-      }
-
-      try {
-        const result = originalMethod.apply(this, args);
-
-        if (result instanceof Promise) {
-          return chainAsyncHooks(result as Promise<R>, context, hooks);
-        }
-
-        // If an error occurs in the onReturn hook, `finally` will be triggered 2 times.
-        // Intentional architecture choice due to TS limitations
-        return handleSyncSuccess(result as R, context, hooks);
-      } catch (error: unknown) {
-        return handleSyncError(error, context, hooks);
-      }
-    };
+    const wrapped = wrapFunction(
+      originalMethod,
+      parameterNames,
+      propertyKey,
+      descriptor,
+      hooksOrFactory,
+    );
 
     copySymMeta(originalMethod, wrapped);
 
@@ -104,6 +77,8 @@ export const EffectOnMethod = <R = unknown>(
   };
 };
 
+
+
 /**
  * Builds an object mapping parameter names to their values.
  *
@@ -112,7 +87,7 @@ export const EffectOnMethod = <R = unknown>(
  *
  * @param parameterNames - Array of parameter names
  * @param args - Array of argument values
- * @returns Object mapping parameter names to values
+ * @returns Object mapping parameter names to values, or undefined when empty
  *
  * @example
  * buildArgsObject(['id', 'name'], [1, 'John'])
@@ -120,7 +95,10 @@ export const EffectOnMethod = <R = unknown>(
  *
  * @internal
  */
-export const buildArgsObject = (parameterNames: string[], args: unknown[]): Record<string, unknown> | undefined => {
+export const buildArgsObject = (
+  parameterNames: string[],
+  args: unknown[],
+): Record<string, unknown> | undefined => {
   if (args.length === 0 && parameterNames.length === 0) {
     return undefined;
   }
@@ -137,6 +115,89 @@ export const buildArgsObject = (parameterNames: string[], args: unknown[]): Reco
 };
 
 /**
+ * Builds the per-method wrapper used by {@link EffectOnMethod}: constructs
+ * {@link HookContext}, resolves hooks, and wires `onInvoke` plus execution.
+ */
+export const wrapFunction = <R = unknown>(
+  originalMethod: (...args: unknown[]) => unknown,
+  parameterNames: string[],
+  propertyKey: string | symbol,
+  descriptor: PropertyDescriptor,
+  hooksOrFactory: HooksOrFactory<R>,
+): ((this: object, ...args: unknown[]) => unknown) =>
+  function (this: object, ...args: unknown[]): unknown {
+    const argsObject = buildArgsObject(parameterNames, args);
+    const className = (this.constructor as { name: string }).name ?? '';
+
+    const context: HookContext = {
+      argsObject,
+      args,
+      target: this,
+      propertyKey,
+      descriptor,
+      parameterNames,
+      className,
+    };
+
+    const hooks = resolveHooks(hooksOrFactory, context);
+
+    const executeMethod = attachHooks(originalMethod, this, args, context, hooks);
+
+    if (hooks.onInvoke) {
+      const invokeResult = hooks.onInvoke(context);
+
+      if (invokeResult instanceof Promise) {
+        return invokeResult.then(executeMethod);
+      }
+    }
+
+    return executeMethod();
+  };
+
+/**
+ * Returns a thunk that runs the original method and applies sync/async lifecycle hooks.
+ *
+ * Kept as a thunk so async `onInvoke` can defer execution via `.then()`.
+ * `finally` is applied inline on sync paths to avoid double-calling when
+ * `onReturn` or `onError` throw.
+ */
+export const attachHooks = <R>(
+  originalMethod: (...args: unknown[]) => unknown,
+  thisArg: object,
+  args: unknown[],
+  context: HookContext,
+  hooks: EffectHooks<R>,
+): (() => unknown) => () => {
+  try {
+    const result = originalMethod.apply(thisArg, args);
+
+    if (result instanceof Promise) {
+      return chainAsyncHooks(result, context, hooks);
+    }
+
+    try {
+      return hooks.onReturn
+        ? hooks.onReturn({ ...context, result: result as UnwrapPromise<R> })
+        : result;
+    } finally {
+      hooks.finally?.(context);
+    }
+  } catch (error: unknown) {
+    try {
+      if (hooks.onError) {
+        return hooks.onError({ ...context, error });
+      }
+
+      throw error;
+    } finally {
+      hooks.finally?.(context);
+    }
+  }
+};
+
+
+
+/**
  * Copies the `_symMeta` Map from the original function to a new function.
  *
  * When `EffectOnMethod` replaces `descriptor.value` with a wrapper,
@@ -144,10 +205,7 @@ export const buildArgsObject = (parameterNames: string[], args: unknown[]): Reco
  * or `@NoLog`) must survive on the new wrapper so downstream consumers
  * (like `EffectOnClass`) can still read it.
  */
-const copySymMeta = (
-  source: Function,
-  target: Function,
-): void => {
+const copySymMeta = (source: Function, target: Function): void => {
   const sourceRecord = source as unknown as Record<string, unknown>;
   const sourceMap = sourceRecord[SYM_META_PROP] as
     | Map<symbol, unknown>
@@ -167,9 +225,7 @@ const copySymMeta = (
   }
 
   const targetMap = targetRecord[SYM_META_PROP] as Map<symbol, unknown>;
-  sourceMap.forEach((value, key) => {
-    targetMap.set(key, value);
-  });
+  sourceMap.forEach((value, key) => targetMap.set(key, value));
 };
 
 /**
@@ -189,80 +245,32 @@ const resolveHooks = <R>(
 };
 
 /**
- * Handles the synchronous success + finally path.
+ * Applies lifecycle hooks (onReturn, onError, finally) to an async method result.
  *
- * Separated to keep the main decorator body within line limits.
+ * Uses async/await with try/catch/finally so that onReturn fires after
+ * resolution, onError fires after rejection, and finally always fires last.
  */
-const handleSyncSuccess = <R>(
-  result: R,
+const chainAsyncHooks = async <R>(
+  promise: Promise<unknown>,
   context: HookContext,
   hooks: EffectHooks<R>,
-): R => {
+): Promise<unknown> => {
   try {
-    return hooks.onReturn
-      ? hooks.onReturn({ ...context, result })
-      : result;
-  } finally {
-    if (hooks.finally) {
-      hooks.finally(context);
-    }
-  }
-};
+    const value = await promise;
 
-/**
- * Handles the synchronous error + finally path.
- *
- * Separated to keep the main decorator body within line limits.
- */
-const handleSyncError = <R>(
-  error: unknown,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): R => {
-  try {
+    return hooks.onReturn
+      ? await hooks.onReturn({ ...context, result: value as UnwrapPromise<R> })
+      : value;
+  } catch (error: unknown) {
     if (hooks.onError) {
-      return hooks.onError({ ...context, error });
+      return await hooks.onError({ ...context, error });
     }
 
     throw error;
   } finally {
     if (hooks.finally) {
-      hooks.finally(context);
+      await hooks.finally(context);
     }
   }
 };
 
-/**
- * Chains promise lifecycle hooks for asynchronous method execution.
- *
- * Uses `.then` / `.catch` / `.finally` on the returned promise so that
- * `onReturn` fires after resolution, `onError` fires after rejection,
- * and `finally` always fires last.
- */
-const chainAsyncHooks = <R>(
-  promise: Promise<R>,
-  context: HookContext,
-  hooks: EffectHooks<R>,
-): Promise<R> => {
-  let chained = promise;
-
-  if (hooks.onReturn) {
-    chained = chained.then((value) => {
-      return hooks.onReturn!({ ...context, result: value });
-    });
-  }
-
-  if (hooks.onError) {
-    chained = chained.catch((error: unknown) => {
-      return hooks.onError!({ ...context, error });
-    });
-  }
-
-  if (hooks.finally) {
-    chained = chained.finally(() => {
-      hooks.finally!(context);
-    });
-  }
-
-  return chained;
-};
