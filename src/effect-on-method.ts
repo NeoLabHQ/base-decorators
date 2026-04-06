@@ -59,63 +59,13 @@ export const EffectOnMethod = <R = unknown>(
     // Extract parameter names at decoration time (once, not per-call)
     const parameterNames = getParameterNames(originalMethod);
 
-    const wrapped = function (this: object, ...args: unknown[]): unknown {
-      const argsObject = buildArgsObject(parameterNames, args);
-      const className = (this.constructor as { name: string }).name ?? '';
-
-      const context: HookContext = {
-        argsObject,
-        args,
-        target: this,
-        propertyKey,
-        descriptor,
-        parameterNames,
-        className,
-      };
-
-      const hooks = resolveHooks(hooksOrFactory, context);
-
-      // Executes the original method and applies sync/async lifecycle hooks.
-      // Kept as a closure so async onInvoke can defer execution via .then().
-      // finally kept inline to avoid double-calling when onReturn or onError throw.
-      const executeMethod = (): unknown => {
-        try {
-          const result = originalMethod.apply(this, args);
-
-          if (result instanceof Promise) {
-            return chainAsyncHooks(result, context, hooks);
-          }
-
-          try {
-            return hooks.onReturn
-              ? hooks.onReturn({ ...context, result: result as UnwrapPromise<R> })
-              : result;
-          } finally {
-            hooks.finally?.(context);
-          }
-        } catch (error: unknown) {
-          try {
-            if (hooks.onError) {
-              return hooks.onError({ ...context, error });
-            }
-
-            throw error;
-          } finally {
-            hooks.finally?.(context);
-          }
-        } 
-      };
-
-      if (hooks.onInvoke) {
-        const invokeResult = hooks.onInvoke(context);
-
-        if (invokeResult instanceof Promise) {
-          return invokeResult.then(executeMethod);
-        }
-      }
-
-      return executeMethod();
-    };
+    const wrapped = wrapFunction(
+      originalMethod,
+      parameterNames,
+      propertyKey,
+      descriptor,
+      hooksOrFactory,
+    );
 
     copySymMeta(originalMethod, wrapped);
 
@@ -126,6 +76,8 @@ export const EffectOnMethod = <R = unknown>(
     return descriptor;
   };
 };
+
+
 
 /**
  * Builds an object mapping parameter names to their values.
@@ -161,6 +113,89 @@ export const buildArgsObject = (
 
   return argsObject;
 };
+
+/**
+ * Builds the per-method wrapper used by {@link EffectOnMethod}: constructs
+ * {@link HookContext}, resolves hooks, and wires `onInvoke` plus execution.
+ */
+export const wrapFunction = <R = unknown>(
+  originalMethod: (...args: unknown[]) => unknown,
+  parameterNames: string[],
+  propertyKey: string | symbol,
+  descriptor: PropertyDescriptor,
+  hooksOrFactory: HooksOrFactory<R>,
+): ((this: object, ...args: unknown[]) => unknown) =>
+  function (this: object, ...args: unknown[]): unknown {
+    const argsObject = buildArgsObject(parameterNames, args);
+    const className = (this.constructor as { name: string }).name ?? '';
+
+    const context: HookContext = {
+      argsObject,
+      args,
+      target: this,
+      propertyKey,
+      descriptor,
+      parameterNames,
+      className,
+    };
+
+    const hooks = resolveHooks(hooksOrFactory, context);
+
+    const executeMethod = attachHooks(originalMethod, this, args, context, hooks);
+
+    if (hooks.onInvoke) {
+      const invokeResult = hooks.onInvoke(context);
+
+      if (invokeResult instanceof Promise) {
+        return invokeResult.then(executeMethod);
+      }
+    }
+
+    return executeMethod();
+  };
+
+/**
+ * Returns a thunk that runs the original method and applies sync/async lifecycle hooks.
+ *
+ * Kept as a thunk so async `onInvoke` can defer execution via `.then()`.
+ * `finally` is applied inline on sync paths to avoid double-calling when
+ * `onReturn` or `onError` throw.
+ */
+export const attachHooks = <R>(
+  originalMethod: (...args: unknown[]) => unknown,
+  thisArg: object,
+  args: unknown[],
+  context: HookContext,
+  hooks: EffectHooks<R>,
+): (() => unknown) => () => {
+  try {
+    const result = originalMethod.apply(thisArg, args);
+
+    if (result instanceof Promise) {
+      return chainAsyncHooks(result, context, hooks);
+    }
+
+    try {
+      return hooks.onReturn
+        ? hooks.onReturn({ ...context, result: result as UnwrapPromise<R> })
+        : result;
+    } finally {
+      hooks.finally?.(context);
+    }
+  } catch (error: unknown) {
+    try {
+      if (hooks.onError) {
+        return hooks.onError({ ...context, error });
+      }
+
+      throw error;
+    } finally {
+      hooks.finally?.(context);
+    }
+  }
+};
+
+
 
 /**
  * Copies the `_symMeta` Map from the original function to a new function.
@@ -230,7 +265,7 @@ const chainAsyncHooks = async <R>(
     if (hooks.onError) {
       return await hooks.onError({ ...context, error });
     }
-    
+
     throw error;
   } finally {
     if (hooks.finally) {
@@ -238,3 +273,4 @@ const chainAsyncHooks = async <R>(
     }
   }
 };
+
