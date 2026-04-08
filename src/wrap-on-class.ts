@@ -1,57 +1,59 @@
 /**
- * Class-level decorator that applies lifecycle hooks to all prototype methods.
+ * Class-level decorator that applies a {@link WrapFn} to all prototype methods.
  *
  * Iterates `Object.getOwnPropertyNames(target.prototype)`, skipping the
  * constructor, non-function values, getters/setters, methods already wrapped
- * by {@link EffectOnMethod} (detected via {@link EFFECT_APPLIED_KEY}), and
+ * by {@link WrapOnMethod} (detected via {@link WRAP_APPLIED_KEY}), and
  * methods excluded via an optional `exclusionKey` symbol.
  *
- * This module is logger-agnostic and contains zero imports from `@nestjs/common`.
- *
- * @module effect-on-class
+ * @module wrap-on-class
  */
 
 import { getMeta } from './set-meta.decorator';
-import type { HooksOrFactory } from './hook.types';
-import { EffectOnMethod, EFFECT_APPLIED_KEY } from './effect-on-method';
+import type { WrapFn } from './hook.types';
+import { WrapOnMethod, WRAP_APPLIED_KEY } from './wrap-on-method';
 
 /**
  * Class decorator factory that wraps every eligible prototype method with
- * lifecycle hooks via {@link EffectOnMethod}.
+ * a user-provided {@link WrapFn} via {@link WrapOnMethod}.
  *
  * Skipped members:
  * - `constructor`
  * - Non-function prototype values
  * - Getters and setters (only plain `descriptor.value` functions are wrapped)
  * - Methods marked with `exclusionKey` metadata (double-wrap prevention and
- *   explicit exclusion via e.g. `@NoLog()`)
+ *   explicit exclusion via e.g. `@SetMeta(key, true)`)
  *
- * @typeParam R - The return type expected from lifecycle hooks
- * @param hooks        - Lifecycle callbacks forwarded to {@link EffectOnMethod}
+ * @typeParam R - The return type expected from the wrapped methods
+ * @param wrapFn       - Factory forwarded to {@link WrapOnMethod} for each
+ *                        eligible method
  * @param exclusionKey - Symbol used to detect already-decorated and excluded
- *                       methods. Defaults to {@link EFFECT_APPLIED_KEY}. Pass a
+ *                       methods. Defaults to {@link WRAP_APPLIED_KEY}. Pass a
  *                       custom symbol to isolate this decorator from other
- *                       Effect-based decorators.
+ *                       Wrap-based decorators.
  * @returns A standard `ClassDecorator`
  *
  * @example
  * ```ts
- * const SKIP = Symbol('skip');
+ * const LOG_KEY = Symbol('log');
  *
- * \@EffectOnClass({ onReturn: ({ propertyKey, result }) => { console.log(propertyKey); return result; } }, SKIP)
+ * \@WrapOnClass((method, ctx) => (...args) => {
+ *   console.log(`${ctx.className}.${String(ctx.propertyKey)} called`);
+ *   return method(...args);
+ * }, LOG_KEY)
  * class Service {
  *   doWork() { return 42; }
  *
- *   \@SetMeta(SKIP, true)
+ *   \@SetMeta(LOG_KEY, true)
  *   internal() { return 'skipped'; }
  * }
  * ```
  */
-export const EffectOnClass = <R = unknown>(
-  hooks: HooksOrFactory<R>,
-  exclusionKey: symbol = EFFECT_APPLIED_KEY,
+export const WrapOnClass = <R = unknown>(
+  wrapFn: WrapFn<R>,
+  exclusionKey: symbol = WRAP_APPLIED_KEY,
 ): ClassDecorator => {
-  const methodDecorator = EffectOnMethod(hooks, exclusionKey);
+  const methodDecorator = WrapOnMethod(wrapFn, exclusionKey);
 
   return (target: Function): void => {
     const prototype = target.prototype as Record<string, unknown>;
@@ -59,13 +61,13 @@ export const EffectOnClass = <R = unknown>(
 
     for (const propertyName of propertyNames) {
       if (propertyName === 'constructor') {
-        continue
+        continue;
       }
 
       const descriptor = Object.getOwnPropertyDescriptor(prototype, propertyName);
       if (
         !descriptor
-        || !isPlainMethod(descriptor) 
+        || !isPlainMethod(descriptor)
         || shouldSkipMethod(descriptor, exclusionKey)
       ) {
         continue;
@@ -76,7 +78,6 @@ export const EffectOnClass = <R = unknown>(
     }
   };
 };
-
 
 /**
  * Determines whether a property descriptor represents a plain method.
@@ -93,9 +94,9 @@ const isPlainMethod = (descriptor: PropertyDescriptor): boolean => {
  * Determines whether a method should be skipped by the class decorator.
  *
  * Uses the provided `exclusionKey` to check for metadata on the method.
- * When `EffectOnMethod` wraps a method it marks it with the same key,
+ * When `WrapOnMethod` wraps a method it marks it with the same key,
  * so this single check handles both double-wrap prevention (method already
- * decorated by this decorator type) and explicit exclusion (e.g. `@NoLog()`).
+ * decorated by this decorator type) and explicit exclusion (e.g. `@SetMeta(key, true)`).
  */
 const shouldSkipMethod = (
   descriptor: PropertyDescriptor,

@@ -313,7 +313,7 @@ describe('Effect', () => {
       // This cannot happen with normal TypeScript decorator application but tests the guard
       expect(() => {
         (decorator as Function)({}, 'someProperty', undefined);
-      }).toThrow('Effect decorator can only be applied to classes or methods');
+      }).toThrow('Wrap decorator can only be applied to classes or methods');
     });
   });
 });

@@ -2,18 +2,14 @@
 export type HookArgs = Record<string, unknown> | undefined;
 
 /**
- * Shared context passed to every lifecycle hook.
+ * Decoration-time and runtime context available to every wrapper.
  *
- * Contains the common fields available at every lifecycle point:
- * the pre-built args object, the `this` target, the property key,
- * the property descriptor, extracted parameter names, and the
- * runtime class name.
+ * Contains the fields that are known at decoration time (propertyKey,
+ * parameterNames, descriptor) plus fields resolved at runtime (target,
+ * className). Does NOT include per-call argument data -- that is added
+ * by {@link HookContext} for lifecycle-hook consumers.
  */
-export interface HookContext {
-  /** Raw arguments array passed to the method. */
-  args: unknown[];
-  /** Pre-built args object mapping parameter names to their values. */
-  argsObject: HookArgs;
+export interface WrapContext {
   /** The `this` target object (class instance). */
   target: object;
   /** The property key of the decorated method. */
@@ -24,6 +20,34 @@ export interface HookContext {
   className: string;
   /** The property descriptor of the decorated method. */
   descriptor: PropertyDescriptor;
+}
+
+/**
+ * Factory function accepted by the Wrap decorator.
+ *
+ * Receives the original (this-bound) method and a {@link WrapContext},
+ * and returns a replacement function that is called with the actual
+ * arguments at invocation time.
+ *
+ * @typeParam R - The return type produced by the replacement function
+ */
+export type WrapFn<R = unknown> = (
+  method: (...args: unknown[]) => unknown,
+  context: WrapContext,
+) => (...args: unknown[]) => R;
+
+/**
+ * Shared context passed to every lifecycle hook.
+ *
+ * Extends {@link WrapContext} with per-call argument data: the raw
+ * arguments array and the pre-built args object mapping parameter
+ * names to their values.
+ */
+export interface HookContext extends WrapContext {
+  /** Raw arguments array passed to the method. */
+  args: unknown[];
+  /** Pre-built args object mapping parameter names to their values. */
+  argsObject: HookArgs;
 }
 
 /** Extracts the resolved type from a Promise, or returns the type itself. */
