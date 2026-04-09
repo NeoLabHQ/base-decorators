@@ -37,9 +37,9 @@ import { WrapOnMethod, WRAP_KEY } from './wrap-on-method';
  * ```ts
  * const LOG_KEY = Symbol('log');
  *
- * \@WrapOnClass((method, ctx) => (...args) => {
- *   console.log(`${ctx.className}.${String(ctx.propertyKey)} called`);
- *   return method(...args);
+ * \@WrapOnClass((ctx) => (invCtx, method) => {
+ *   console.log(`${invCtx.className}.${String(ctx.propertyKey)} called`);
+ *   return method(...invCtx.args);
  * }, LOG_KEY)
  * class Service {
  *   doWork() { return 42; }

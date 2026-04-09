@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import type {
   WrapContext,
+  InvocationContext,
   WrapFn,
   HookContext,
   HookArgs,
@@ -18,81 +19,128 @@ import type {
 } from '../src/hook.types';
 
 describe('hook.types', () => {
-  describe('WrapContext', () => {
-    it('contains exactly the 5 required fields', () => {
+  describe('WrapContext (decoration-time)', () => {
+    it('contains exactly the 3 decoration-time fields', () => {
       const ctx: WrapContext = {
-        target: {},
         propertyKey: 'method',
         parameterNames: ['a', 'b'],
-        className: 'TestClass',
         descriptor: { value: () => undefined, writable: true, enumerable: true, configurable: true },
       };
 
-      expect(ctx.target).toBeDefined();
       expect(ctx.propertyKey).toBe('method');
       expect(ctx.parameterNames).toEqual(['a', 'b']);
-      expect(ctx.className).toBe('TestClass');
       expect(ctx.descriptor).toBeDefined();
     });
 
-    it('does not contain args or argsObject', () => {
+    it('does not contain target, className, args, or argsObject', () => {
       const ctx: WrapContext = {
-        target: {},
         propertyKey: 'method',
         parameterNames: [],
-        className: 'TestClass',
         descriptor: { value: () => undefined, writable: true, enumerable: true, configurable: true },
       };
 
+      expect(ctx).not.toHaveProperty('target');
+      expect(ctx).not.toHaveProperty('className');
       expect(ctx).not.toHaveProperty('args');
       expect(ctx).not.toHaveProperty('argsObject');
     });
   });
 
+  describe('InvocationContext (per-call, extends WrapContext)', () => {
+    it('contains target, className, args, argsObject, plus WrapContext fields', () => {
+      const invCtx: InvocationContext = {
+        propertyKey: 'method',
+        parameterNames: ['a', 'b'],
+        descriptor: { value: () => undefined, writable: true, enumerable: true, configurable: true },
+        target: {},
+        className: 'TestClass',
+        args: [1, 2],
+        argsObject: { a: 1, b: 2 },
+      };
+
+      expect(invCtx.target).toBeDefined();
+      expect(invCtx.className).toBe('TestClass');
+      expect(invCtx.args).toEqual([1, 2]);
+      expect(invCtx.argsObject).toEqual({ a: 1, b: 2 });
+      expect(invCtx.propertyKey).toBe('method');
+      expect(invCtx.parameterNames).toEqual(['a', 'b']);
+      expect(invCtx.descriptor).toBeDefined();
+    });
+
+    it('is assignable to WrapContext (structural subtype)', () => {
+      const invCtx: InvocationContext = {
+        propertyKey: 'method',
+        parameterNames: [],
+        descriptor: { value: () => undefined, writable: true, enumerable: true, configurable: true },
+        target: {},
+        className: 'Test',
+        args: [],
+        argsObject: undefined,
+      };
+
+      const wrapCtx: WrapContext = invCtx;
+      expect(wrapCtx.propertyKey).toBe('method');
+    });
+  });
+
   describe('WrapFn', () => {
-    it('accepts a method and WrapContext, returns a function', () => {
-      const wrapFn: WrapFn = (method, context) => {
-        return (...args: unknown[]) => {
-          return method(...args);
+    it('accepts WrapContext and returns a function taking InvocationContext and method', () => {
+      const wrapFn: WrapFn = (_context) => {
+        return (invCtx, method) => {
+          return method(...invCtx.args);
         };
       };
 
       const fakeMethod = (...args: unknown[]) => args[0];
       const ctx: WrapContext = {
-        target: {},
         propertyKey: 'test',
         parameterNames: [],
-        className: 'Test',
         descriptor: { value: fakeMethod, writable: true, enumerable: true, configurable: true },
       };
 
-      const wrapped = wrapFn(fakeMethod, ctx);
-      expect(wrapped(42)).toBe(42);
+      const factory = wrapFn(ctx);
+      const invCtx: InvocationContext = {
+        propertyKey: 'test',
+        parameterNames: [],
+        descriptor: ctx.descriptor,
+        target: {},
+        className: 'Test',
+        args: [42],
+        argsObject: undefined,
+      };
+      expect(factory(invCtx, fakeMethod)).toBe(42);
     });
 
     it('supports generic return type parameter', () => {
-      const wrapFn: WrapFn<number> = (method, _context) => {
-        return (...args: unknown[]) => {
-          return (method(...args) as number) * 2;
+      const wrapFn: WrapFn<number> = (_context) => {
+        return (invCtx, method) => {
+          return (method(...invCtx.args) as number) * 2;
         };
       };
 
       const fakeMethod = (..._args: unknown[]) => 21;
       const ctx: WrapContext = {
-        target: {},
         propertyKey: 'test',
         parameterNames: [],
-        className: 'Test',
         descriptor: { value: fakeMethod, writable: true, enumerable: true, configurable: true },
       };
 
-      const wrapped = wrapFn(fakeMethod, ctx);
-      expect(wrapped()).toBe(42);
+      const factory = wrapFn(ctx);
+      const invCtx: InvocationContext = {
+        propertyKey: 'test',
+        parameterNames: [],
+        descriptor: ctx.descriptor,
+        target: {},
+        className: 'Test',
+        args: [],
+        argsObject: undefined,
+      };
+      expect(factory(invCtx, fakeMethod)).toBe(42);
     });
   });
 
-  describe('HookContext extends WrapContext', () => {
-    it('contains all 7 fields (5 from WrapContext + args + argsObject)', () => {
+  describe('HookContext extends InvocationContext', () => {
+    it('contains all 7 fields (3 from WrapContext + 4 runtime)', () => {
       const hookCtx: HookContext = {
         target: {},
         propertyKey: 'method',
@@ -125,6 +173,22 @@ describe('hook.types', () => {
 
       const wrapCtx: WrapContext = hookCtx;
       expect(wrapCtx.propertyKey).toBe('method');
+    });
+
+    it('is assignable to InvocationContext (structural subtype)', () => {
+      const hookCtx: HookContext = {
+        target: {},
+        propertyKey: 'method',
+        parameterNames: [],
+        className: 'Cls',
+        descriptor: { value: () => undefined, writable: true, enumerable: true, configurable: true },
+        args: [],
+        argsObject: undefined,
+      };
+
+      const invCtx: InvocationContext = hookCtx;
+      expect(invCtx.target).toBeDefined();
+      expect(invCtx.className).toBe('Cls');
     });
   });
 

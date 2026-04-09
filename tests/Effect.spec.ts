@@ -305,6 +305,207 @@ describe('Effect', () => {
     });
   });
 
+  describe('factory hook resolution', () => {
+    it('should call factory ONCE at decoration time, not per invocation', () => {
+      const factorySpy = vi.fn(() => ({
+        onReturn: ({ result }: { result: unknown }) => result,
+      }));
+
+      class TestService {
+        @Effect(factorySpy)
+        doWork() {
+          return 42;
+        }
+      }
+
+      // Factory called at decoration time
+      expect(factorySpy).toHaveBeenCalledTimes(1);
+
+      const service = new TestService();
+
+      service.doWork();
+      expect(factorySpy).toHaveBeenCalledTimes(1);
+
+      service.doWork();
+      expect(factorySpy).toHaveBeenCalledTimes(1);
+
+      service.doWork();
+      expect(factorySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should call factory once at decoration time, reuse for all instances', () => {
+      const factorySpy = vi.fn(() => ({
+        onReturn: ({ result }: { result: unknown }) => result,
+      }));
+
+      class TestService {
+        @Effect(factorySpy)
+        doWork() {
+          return 42;
+        }
+      }
+
+      // Factory called once at decoration time
+      expect(factorySpy).toHaveBeenCalledTimes(1);
+
+      const serviceA = new TestService();
+      const serviceB = new TestService();
+
+      serviceA.doWork();
+      expect(factorySpy).toHaveBeenCalledTimes(1);
+
+      serviceB.doWork();
+      expect(factorySpy).toHaveBeenCalledTimes(1);
+
+      serviceA.doWork();
+      serviceB.doWork();
+      expect(factorySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should pass WrapContext fields to factory (propertyKey, parameterNames, descriptor)', () => {
+      let receivedContext: Record<string, unknown> | undefined;
+
+      const factory = (ctx: Record<string, unknown>) => {
+        receivedContext = ctx;
+        return {
+          onReturn: ({ result }: { result: unknown }) => result,
+        };
+      };
+
+      class TestService {
+        @Effect(factory as Parameters<typeof Effect>[0])
+        greet(name: string, greeting: string) {
+          return `${greeting} ${name}`;
+        }
+      }
+      void TestService;
+
+      // Factory called at decoration time
+      expect(receivedContext).toBeDefined();
+      expect(receivedContext!['propertyKey']).toBe('greet');
+      expect(receivedContext!['parameterNames']).toEqual(['name', 'greeting']);
+      expect(receivedContext!['descriptor']).toBeDefined();
+    });
+
+    it('should NOT pass args, argsObject, target, or className to factory', () => {
+      let receivedContext: Record<string, unknown> | undefined;
+
+      const factory = (ctx: Record<string, unknown>) => {
+        receivedContext = ctx;
+        return {};
+      };
+
+      class TestService {
+        @Effect(factory as Parameters<typeof Effect>[0])
+        doWork(x: number) {
+          return x;
+        }
+      }
+      void TestService;
+
+      // Factory is called at decoration time, no runtime fields available
+      expect(receivedContext).toBeDefined();
+      expect(receivedContext!['args']).toBeUndefined();
+      expect(receivedContext!['argsObject']).toBeUndefined();
+      expect(receivedContext!['target']).toBeUndefined();
+      expect(receivedContext!['className']).toBeUndefined();
+    });
+
+    it('should pass full HookContext to each resolved hook per invocation', () => {
+      const capturedContexts: Record<string, unknown>[] = [];
+
+      const factory = () => ({
+        onInvoke: (ctx: Record<string, unknown>) => {
+          capturedContexts.push(ctx);
+        },
+        onReturn: ({ result }: { result: unknown }) => result,
+      });
+
+      class TestService {
+        @Effect(factory as Parameters<typeof Effect>[0])
+        greet(name: string) {
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new TestService();
+      service.greet('alice');
+      service.greet('bob');
+
+      expect(capturedContexts).toHaveLength(2);
+
+      // First invocation: full HookContext with args
+      expect(capturedContexts[0]['args']).toEqual(['alice']);
+      expect(capturedContexts[0]['target']).toBe(service);
+      expect(capturedContexts[0]['className']).toBe('TestService');
+      expect(capturedContexts[0]['propertyKey']).toBe('greet');
+
+      // Second invocation: different args, same instance
+      expect(capturedContexts[1]['args']).toEqual(['bob']);
+      expect(capturedContexts[1]['target']).toBe(service);
+    });
+
+    it('should use factory-returned hooks for method execution', () => {
+      const callOrder: string[] = [];
+
+      const factory = () => ({
+        onInvoke: () => callOrder.push('factory-onInvoke'),
+        onReturn: ({ result }: { result: string }) => {
+          callOrder.push('factory-onReturn');
+          return result;
+        },
+        finally: () => callOrder.push('factory-finally'),
+      });
+
+      class TestService {
+        @Effect(factory as Parameters<typeof Effect>[0])
+        greet(name: string) {
+          callOrder.push('original');
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new TestService();
+      const result = service.greet('world');
+
+      expect(result).toBe('hello world');
+      expect(callOrder).toEqual([
+        'factory-onInvoke',
+        'original',
+        'factory-onReturn',
+        'factory-finally',
+      ]);
+    });
+
+    it('should work with factory and class-level decoration', () => {
+      const factorySpy = vi.fn(() => ({
+        onReturn: ({ result }: { result: unknown }) => result,
+      }));
+
+      @Effect(factorySpy)
+      class TestService {
+        methodA() {
+          return 'a';
+        }
+
+        methodB() {
+          return 'b';
+        }
+      }
+
+      // Factory called once per method at decoration time
+      // (WrapOnClass creates separate WrapOnMethod per method)
+      expect(factorySpy).toHaveBeenCalledTimes(2);
+
+      const service = new TestService();
+      service.methodA();
+      service.methodB();
+
+      // Still 2 (not called again per invocation)
+      expect(factorySpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('unsupported context throws error', () => {
     it('should throw Error when applied in an unsupported context', () => {
       const decorator = Effect({});
