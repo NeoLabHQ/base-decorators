@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { Wrap } from '../src/wrap.decorator';
 import { SetMeta, getMeta } from '../src/set-meta.decorator';
-import { WRAP_APPLIED_KEY } from '../src/wrap-on-method';
+import { WRAP_KEY } from '../src/wrap-on-method';
 import type { WrapFn, WrapContext } from '../src/hook.types';
 
 describe('Wrap', () => {
@@ -39,7 +39,7 @@ describe('Wrap', () => {
         TestService.prototype,
         'doWork',
       );
-      expect(getMeta(WRAP_APPLIED_KEY, descriptor!)).toBe(true);
+      expect(getMeta(WRAP_KEY, descriptor!)).toBe(true);
     });
   });
 

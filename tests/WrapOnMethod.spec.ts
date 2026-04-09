@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { WrapOnMethod, WRAP_APPLIED_KEY } from '../src/wrap-on-method';
+import { WrapOnMethod, WRAP_KEY } from '../src/wrap-on-method';
 import { getMeta, SetMeta } from '../src/set-meta.decorator';
 import type { WrapFn, WrapContext } from '../src/hook.types';
 
 describe('WrapOnMethod', () => {
-  describe('WRAP_APPLIED_KEY', () => {
+  describe('WRAP_KEY', () => {
     it('should be a unique symbol', () => {
-      expect(typeof WRAP_APPLIED_KEY).toBe('symbol');
-      expect(WRAP_APPLIED_KEY.toString()).toContain('wrapApplied');
+      expect(typeof WRAP_KEY).toBe('symbol');
+      expect(WRAP_KEY.toString()).toContain('wrap');
     });
   });
 
@@ -253,7 +253,7 @@ describe('WrapOnMethod', () => {
   });
 
   describe('exclusion key', () => {
-    it('should set WRAP_APPLIED_KEY as default exclusion key', () => {
+    it('should set WRAP_KEY as default exclusion key', () => {
       const wrapFn: WrapFn = (method, _context) => {
         return (...args: unknown[]) => method(...args);
       };
@@ -270,7 +270,7 @@ describe('WrapOnMethod', () => {
         'doWork',
       );
 
-      expect(getMeta<boolean>(WRAP_APPLIED_KEY, descriptor)).toBe(true);
+      expect(getMeta<boolean>(WRAP_KEY, descriptor)).toBe(true);
     });
 
     it('should use custom exclusion key when provided', () => {
@@ -295,7 +295,7 @@ describe('WrapOnMethod', () => {
       expect(getMeta<boolean>(CUSTOM_KEY, descriptor)).toBe(true);
     });
 
-    it('should NOT set default WRAP_APPLIED_KEY when custom key is provided', () => {
+    it('should NOT set default WRAP_KEY when custom key is provided', () => {
       const CUSTOM_KEY = Symbol('custom');
 
       const wrapFn: WrapFn = (method, _context) => {
@@ -314,9 +314,9 @@ describe('WrapOnMethod', () => {
         'doWork',
       );
 
-      // Only the custom key should be set, not the default WRAP_APPLIED_KEY
+      // Only the custom key should be set, not the default WRAP_KEY
       expect(getMeta<boolean>(CUSTOM_KEY, descriptor)).toBe(true);
-      expect(getMeta<boolean>(WRAP_APPLIED_KEY, descriptor)).toBeUndefined();
+      expect(getMeta<boolean>(WRAP_KEY, descriptor)).toBeUndefined();
     });
   });
 

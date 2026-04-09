@@ -9,17 +9,17 @@ import type { WrapFn, WrapContext } from './hook.types';
  * at the method level, preventing double-wrapping when both class-level
  * and method-level decorators are applied.
  */
-export const WRAP_APPLIED_KEY: unique symbol = Symbol('wrapApplied');
+export const WRAP_KEY: unique symbol = Symbol('wrap');
+
 
 /**
  * Core method decorator factory that wraps `descriptor.value` using a
  * user-provided {@link WrapFn} factory.
  *
- * The wrapped function preserves `this` context by binding the original
- * method to the runtime `this` on every invocation. After wrapping, the
- * exclusion key sentinel is set on the descriptor via `setMeta`, and any
- * existing `_symMeta` metadata from the original function is copied to
- * the wrapper.
+ * Internally delegates to {@link wrapMethod} for the per-call wrapping
+ * logic. After wrapping, the exclusion key sentinel is set on the
+ * descriptor via `setMeta`, and any existing `_symMeta` metadata from
+ * the original function is copied to the wrapper.
  *
  * @typeParam R - The return type of the decorated method
  * @param wrapFn       - Factory called per invocation with the `this`-bound
@@ -27,7 +27,7 @@ export const WRAP_APPLIED_KEY: unique symbol = Symbol('wrapApplied');
  *                        replacement function that receives the actual arguments.
  * @param exclusionKey - Optional symbol used to mark the wrapped method. When
  *                        provided, this key is set instead of the default
- *                        {@link WRAP_APPLIED_KEY}. This allows different
+ *                        {@link WRAP_KEY}. This allows different
  *                        Wrap-based decorators to use independent markers that
  *                        do not interfere with each other during class-level
  *                        decoration.
@@ -46,7 +46,7 @@ export const WRAP_APPLIED_KEY: unique symbol = Symbol('wrapApplied');
  */
 export const WrapOnMethod = <R = unknown>(
   wrapFn: WrapFn<R>,
-  exclusionKey: symbol = WRAP_APPLIED_KEY,
+  exclusionKey: symbol = WRAP_KEY,
 ): MethodDecorator => {
   return (
     _target: object,
@@ -58,22 +58,11 @@ export const WrapOnMethod = <R = unknown>(
     // Extract parameter names at decoration time (once, not per-call)
     const parameterNames = getParameterNames(originalMethod);
 
-    const wrapped = function (this: object, ...args: unknown[]): unknown {
-      const boundMethod = originalMethod.bind(this);
-      const className = (this.constructor as { name: string }).name ?? '';
-
-      const wrapContext: WrapContext = {
-        target: this,
-        propertyKey,
-        parameterNames,
-        className,
-        descriptor,
-      };
-
-      const innerFn = wrapFn(boundMethod, wrapContext);
-
-      return innerFn(...args);
-    };
+    const wrapped = wrapMethod(originalMethod, wrapFn, {
+      parameterNames,
+      propertyKey,
+      descriptor,
+    });
 
     copySymMeta(originalMethod, wrapped);
 
@@ -82,6 +71,90 @@ export const WrapOnMethod = <R = unknown>(
     setMeta(exclusionKey, true, descriptor);
 
     return descriptor;
+  };
+};
+
+
+/**
+ * Options describing the method being wrapped by {@link wrapMethod}.
+ *
+ * Groups the decoration-time metadata that {@link wrapMethod} needs
+ * to build a {@link WrapContext} on every invocation.
+ */
+export interface WrapMethodOptions {
+  /** Parameter names extracted from the original function signature. */
+  parameterNames: string[];
+  /** The property key of the method being wrapped. */
+  propertyKey: string | symbol;
+  /** The property descriptor of the method being wrapped. */
+  descriptor: PropertyDescriptor;
+}
+
+/**
+ * Derives the class name from an object's constructor, returning an
+ * empty string when the constructor lacks a `name` property.
+ */
+const getClassName = (instance: object): string => {
+  const ctor = instance.constructor;
+
+  return ctor?.name ?? '';
+};
+
+/**
+ * Wraps a plain method with a {@link WrapFn} factory, producing a new
+ * function that builds a {@link WrapContext} on every call and delegates
+ * to the wrapper.
+ *
+ * This is the standalone (non-decorator) counterpart of {@link WrapOnMethod}.
+ * It can be used directly to wrap any function without relying on the
+ * decorator syntax.
+ *
+ * The wrapper function preserves `this` context by binding the original
+ * method to the runtime `this` on every invocation, and invokes the
+ * {@link WrapFn} per call (not at wrap time).
+ *
+ * @typeParam R - The return type produced by the wrapper
+ * @param originalMethod - The function to wrap
+ * @param wrapFn         - Factory called per invocation with the `this`-bound
+ *                          original method and a {@link WrapContext}. Returns
+ *                          the replacement function that receives the actual
+ *                          arguments.
+ * @param options        - Decoration-time metadata for the method being wrapped
+ * @returns A function that, when called, constructs a {@link WrapContext},
+ *          invokes `wrapFn`, and delegates to the returned inner function
+ *
+ * @example
+ * ```ts
+ * const wrapped = wrapMethod(originalFn, myWrapFn, {
+ *   parameterNames: ['a', 'b'],
+ *   propertyKey: 'add',
+ *   descriptor,
+ * });
+ * const result = wrapped.call(instance, 1, 2);
+ * ```
+ */
+export const wrapMethod = <R = unknown>(
+  originalMethod: (...args: unknown[]) => unknown,
+  wrapFn: WrapFn<R>,
+  options: WrapMethodOptions,
+): ((this: object, ...args: unknown[]) => unknown) => {
+  const { parameterNames, propertyKey, descriptor } = options;
+
+  return function (this: object, ...args: unknown[]): unknown {
+    const boundMethod = originalMethod.bind(this);
+    const className = getClassName(this);
+
+    const wrapContext: WrapContext = {
+      target: this,
+      propertyKey,
+      parameterNames,
+      className,
+      descriptor,
+    };
+
+    const innerFn = wrapFn(boundMethod, wrapContext);
+
+    return innerFn(...args);
   };
 };
 

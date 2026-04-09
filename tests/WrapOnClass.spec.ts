@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { WrapOnClass } from '../src/wrap-on-class';
-import { WrapOnMethod, WRAP_APPLIED_KEY } from '../src/wrap-on-method';
+import { WrapOnMethod, WRAP_KEY } from '../src/wrap-on-method';
 import { SetMeta, getMeta } from '../src/set-meta.decorator';
 import type { WrapFn, WrapContext } from '../src/hook.types';
 
@@ -302,7 +302,7 @@ describe('WrapOnClass', () => {
 
       @WrapOnClass(wrapFn)
       class TestService {
-        @SetMeta(WRAP_APPLIED_KEY, true)
+        @SetMeta(WRAP_KEY, true)
         excluded() {
           return 'excluded';
         }
@@ -446,7 +446,7 @@ describe('WrapOnClass', () => {
 
       @WrapOnClass(wrapFn)
       class TestService {
-        @SetMeta(WRAP_APPLIED_KEY, true)
+        @SetMeta(WRAP_KEY, true)
         excluded() {
           return 'excluded';
         }
@@ -480,7 +480,7 @@ describe('WrapOnClass', () => {
         TestService.prototype,
         'doWork',
       )!;
-      expect(getMeta<boolean>(WRAP_APPLIED_KEY, descriptor)).toBe(true);
+      expect(getMeta<boolean>(WRAP_KEY, descriptor)).toBe(true);
     });
   });
 
@@ -530,7 +530,7 @@ describe('WrapOnClass', () => {
       // Custom key should be set
       expect(getMeta<boolean>(CUSTOM_KEY, descriptor)).toBe(true);
       // Default WRAP_APPLIED_KEY should NOT be set since custom key was used
-      expect(getMeta<boolean>(WRAP_APPLIED_KEY, descriptor)).toBeUndefined();
+      expect(getMeta<boolean>(WRAP_KEY, descriptor)).toBeUndefined();
     });
 
     it('should allow different WrapOnClass decorators with different keys', () => {

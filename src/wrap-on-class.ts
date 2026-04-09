@@ -3,7 +3,7 @@
  *
  * Iterates `Object.getOwnPropertyNames(target.prototype)`, skipping the
  * constructor, non-function values, getters/setters, methods already wrapped
- * by {@link WrapOnMethod} (detected via {@link WRAP_APPLIED_KEY}), and
+ * by {@link WrapOnMethod} (detected via {@link WRAP_KEY}), and
  * methods excluded via an optional `exclusionKey` symbol.
  *
  * @module wrap-on-class
@@ -11,7 +11,7 @@
 
 import { getMeta } from './set-meta.decorator';
 import type { WrapFn } from './hook.types';
-import { WrapOnMethod, WRAP_APPLIED_KEY } from './wrap-on-method';
+import { WrapOnMethod, WRAP_KEY } from './wrap-on-method';
 
 /**
  * Class decorator factory that wraps every eligible prototype method with
@@ -28,7 +28,7 @@ import { WrapOnMethod, WRAP_APPLIED_KEY } from './wrap-on-method';
  * @param wrapFn       - Factory forwarded to {@link WrapOnMethod} for each
  *                        eligible method
  * @param exclusionKey - Symbol used to detect already-decorated and excluded
- *                       methods. Defaults to {@link WRAP_APPLIED_KEY}. Pass a
+ *                       methods. Defaults to {@link WRAP_KEY}. Pass a
  *                       custom symbol to isolate this decorator from other
  *                       Wrap-based decorators.
  * @returns A standard `ClassDecorator`
@@ -51,7 +51,7 @@ import { WrapOnMethod, WRAP_APPLIED_KEY } from './wrap-on-method';
  */
 export const WrapOnClass = <R = unknown>(
   wrapFn: WrapFn<R>,
-  exclusionKey: symbol = WRAP_APPLIED_KEY,
+  exclusionKey: symbol = WRAP_KEY,
 ): ClassDecorator => {
   const methodDecorator = WrapOnMethod(wrapFn, exclusionKey);
 

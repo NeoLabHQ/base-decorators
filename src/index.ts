@@ -1,4 +1,6 @@
-// Internal (not exported): wrap-on-method.ts, wrap-on-class.ts
+// Internal (not exported): wrap-on-class.ts
+export { wrapMethod as wrapFunction } from './wrap-on-method';
+export type { WrapMethodOptions } from './wrap-on-method';
 export * from './wrap.decorator';
 export * from './effect.decorator';
 
