@@ -21,23 +21,24 @@ Basic decorator primitives for TypeScript. Writing decorators in TS is hard, thi
 
 ## Description
 
-Zero-dependency TypeScript library that provides low-level primitives for creating decorators. Instead of wrestling with property descriptors and prototype traversal, you define a decorator from base hooks:
+Zero-dependency TypeScript library that provides low-level primitives for creating decorators. Instead of wrestling with property descriptors and prototype traversal, you use two levels of abstraction:
 
-- `onInvoke` — fired before the method runs
-- `onReturn` — fired after the method succeeds
-- `onError` — fired when the method throws
-- `finally` — fired after either success or failure
+- **`Wrap`** — the foundational primitive that gives you full control over method execution via a higher-order function
+- **`Effect`** — a higher-level abstraction that provides combined lifecycle hooks.
+- **`OnInvokeHook`** — decorator that fires before the method runs
+- **`OnReturnHook`** — decorator that fires after the method succeeds
+- **`OnErrorHook`** — decorator that fires when the method throws
+- **`FinallyHook`** — decorator that fires after either success or failure
 
 The library handles method wrapping, `this` preservation, async/sync support, parameter name extraction, and metadata management so you can focus on your decorator logic.
 
 ### Key Features
 
 - **Zero dependencies** — tiny footprint, no external packages required
-- **Unified decorator** — `Effect` works on both classes and methods
-- **Full async support** — promises are handled automatically with `.then`, `.catch`, and `.finally`
+- **Unified decorators** — all decorators work on classes and methods
+- **Full async support** — promises are handled automatically
 - **Pre-built args object** — arguments are mapped to parameter names and passed into every hook
-- **Metadata utilities** — `SetMeta`, `getMeta`, and `setMeta` for symbol-keyed method metadata
-- **TypeScript native** — written in TypeScript with full type definitions
+- **Metadata management** — Additional tools for storing and retrieving symbol-keyed method metadata
 
 ## Installation
 
@@ -46,6 +47,51 @@ npm install base-decorators
 ```
 
 ## Quick Start
+
+### Using Wrap 
+
+`Wrap` is the foundational primitive. You receive a `WrapContext` at decoration time and return a replacement function:
+
+```typescript
+import { Wrap } from 'base-decorators';
+import type { WrapContext, InvocationContext } from 'base-decorators';
+
+const Log = () => Wrap((context: WrapContext) => {
+  // Outer function: called once at decoration time
+  console.log('decorating', context.propertyKey);
+
+  return (method, {args}) => {
+    // Inner function: called on every invocation
+    console.log('called with', args);
+
+    const result = method(...args);
+
+    console.log('returned', result);
+    return result;
+  };
+});
+
+class Calculator {
+  @Log()
+  add(a: number, b: number) {
+    return a + b;
+  }
+}
+// logs: "decorating add"  (at decoration time)
+
+const calc = new Calculator();
+calc.add(2, 3);
+// logs: "called with [2, 3]"
+// logs: "returned 5"
+
+calc.add(3, 1);
+// logs: "called with [3, 1]"
+// logs: "returned 4"
+```
+
+### Using Effect (lifecycle hooks)
+
+`Effect` provides combined lifecycle hooks for common patterns:
 
 ```typescript
 import { Effect } from 'base-decorators';
@@ -61,29 +107,46 @@ class Calculator {
 }
 
 const calc = new Calculator();
-calc.add(2, 3); // logs arguments and result
+calc.add(2, 3);
+// logs: "add called with [2, 3]"
+// logs: "result: 5"
 ```
 
 ## How It Works
 
-Instead of creating a custom property descriptor wrapper, you can simply compose decorator hooks to get the desired behavior.
+**`Wrap`** accepts a factory function that receives a `WrapContext` at decoration time and returns an inner function. The inner function is called on every invocation with the `this`-bound original method and an `InvocationContext`. You control the entire execution flow:
+
+```typescript
+import { Wrap } from 'base-decorators';
+import type { WrapContext, InvocationContext } from 'base-decorators';
+
+const Log = () => Wrap((context: WrapContext) => {
+  // Outer: called once at decoration time. WrapContext has propertyKey, parameterNames, descriptor.
+  return (method, { args, className }: InvocationContext) => {
+    // Inner: called on every invocation. InvocationContext extends WrapContext with target, className, args, argsObject.
+    console.log(`${className}.${String(context.propertyKey)} called`);
+    return method(...args);
+  };
+});
+```
+
+**`Effect`**: Instead of writing the full wrapping logic yourself, you provide lifecycle hooks and Effect handles the execution flow:
 
 ```typescript
 import { Effect } from 'base-decorators';
 
-/** Logs on invoke and return */
 const Log = () => Effect({
-    onInvoke: ({ args }) => console.log('add called with', args),
+    onInvoke: ({ args }) => console.log('called with', args),
     onReturn: ({ result }) => { console.log('result:', result); return result; },
-})
+});
+```
 
-class Calculator {
-  
-  @Log()
-  add(a: number, b: number) {
-    return a + b;
-  }
-}
+**Convenience hooks** are single-purpose decorators for common patterns:
+
+```typescript
+import { OnInvokeHook } from 'base-decorators';
+
+const Log = () => OnInvokeHook(({ args }) => console.log('called with', args));
 ```
 
 ## Usage
@@ -149,6 +212,35 @@ class Service {
 
 ### Async hooks
 
+All decorators work naturally with async methods. Return an async inner function to handle promises:
+
+```typescript
+import { Wrap } from 'base-decorators';
+import type { WrapContext, InvocationContext } from 'base-decorators';
+
+const AsyncTimer = () => Wrap((context: WrapContext) => {
+  return async (method, { args }) => {
+    const start = Date.now();
+    const result = await method(...args);
+    
+    console.log(`${String(context.propertyKey)} took ${Date.now() - start}ms`);
+    return result;
+  };
+});
+
+class UserService {
+  @AsyncTimer()
+  async fetchUser(id: number) {
+    // async work...
+    return { id, name: 'Alice' };
+  }
+}
+
+const service = new UserService();
+await service.fetchUser(1);
+// logs: "fetchUser took 12ms"
+```
+
 When the decorated method returns a `Promise`, all hooks may optionally return a `Promise` as well. `onReturn` receives the **unwrapped** resolved value, and the library automatically chains the returned promise so async hooks execute in the correct order.
 
 ```typescript
@@ -207,7 +299,7 @@ class Worker {
 
 ### Class and Method decorators
 
-`Effect` and all hook decorators can be used on both classes and methods out of the box.
+All hook decorators can be used on both classes and methods out of the box.
 
 ```typescript
 import { Effect } from 'base-decorators';
@@ -264,7 +356,7 @@ class Service {
 ```typescript
 const Log = (message: string) => Effect({ 
     onInvoke: () => console.log(message) 
-});
+}, Symbol('log'));
 
 const Validate = () => Effect({ 
     onInvoke: ({ args }) => {
@@ -326,17 +418,40 @@ Each hook receives a context object. All hooks are optional. Each hook has a cor
 | `onError` | When the method throws an error | Replaces the thrown error (return a value or re-throw) |
 | `finally` | After `onReturn` or `onError`, regardless of outcome | Ignored |
 
-### HookContext
+### WrapContext
+
+Available in the **outer** factory function passed to `Wrap`. Contains only decoration-time fields -- fields that vary per call (target, className, args) are absent here.
 
 ```typescript
-interface HookContext {
+interface WrapContext {
+  propertyKey: string | symbol;  // method name
+  parameterNames: string[];      // extracted parameter names
+  descriptor: PropertyDescriptor; // method descriptor
+}
+```
+
+### InvocationContext
+
+Passed to the **inner** function returned by your `Wrap` factory. Extends `WrapContext` with per-call runtime fields, so all decoration-time fields are also available here.
+
+```typescript
+interface InvocationContext extends WrapContext {
+  target: object;                                  // class instance (this)
+  className: string;                               // runtime class name
   args: unknown[];                                 // raw arguments
   argsObject: Record<string, unknown> | undefined; // mapped parameter names
-  target: object;                                  // class instance (this)
-  propertyKey: string | symbol;                    // method name
-  parameterNames: string[];                        // extracted parameter names
-  className: string;                               // runtime class name
-  descriptor: PropertyDescriptor;                  // method descriptor
+  // Plus all WrapContext fields: propertyKey, parameterNames, descriptor
+}
+```
+
+### HookContext
+
+Passed to every `Effect` lifecycle hook. Equivalent to `InvocationContext` -- all seven fields are available.
+
+```typescript
+interface HookContext extends InvocationContext {
+  // All fields from WrapContext: propertyKey, parameterNames, descriptor
+  // All fields from InvocationContext: target, className, args, argsObject
 }
 ```
 
@@ -344,7 +459,7 @@ For `onReturn`, the context also includes `result`. For `onError`, it includes `
 
 ### Exclusion keys
 
-You can pass an optional `exclusionKey` symbol to `Effect` or to any hook decorator. That prevents the same method from being wrapped twice when both class-level and method-level decorators are used. You can also mark methods to skip wrapping with `@SetMeta(exclusionKey, true)`.
+You can pass an optional `exclusionKey` symbol to `Wrap`, `Effect`, or to any hook decorator. That prevents the same method from being wrapped twice when both class-level and method-level decorators are used. You can also mark methods to skip wrapping with `@SetMeta(exclusionKey, true)`.
 
 ```typescript
 const EXCLUDE = Symbol('exclude');
@@ -360,14 +475,14 @@ class Service {
 
 ### Factory Hooks
 
-In addition to a static hooks object, `Effect` accepts a **factory function** that receives the current `HookContext` and returns an `EffectHooks` object. This is useful when you need to decide which hooks (or what behavior) to apply at runtime based on the method being invoked.
+In addition to a static hooks object, `Effect` accepts a **factory function** that receives a `WrapContext` and returns an `EffectHooks` object. This is useful when you need to decide which hooks (or what behavior) to apply based on the decorated method.
 
 ```typescript
 import { Effect } from 'base-decorators';
-import type { HookContext, EffectHooks } from 'base-decorators';
+import type { WrapContext, EffectHooks } from 'base-decorators';
 
-const DynamicHooks = Effect(({className}: HookContext): EffectHooks => {
-  if (className === 'DebugService') {
+const DynamicHooks = Effect(({propertyKey}: WrapContext): EffectHooks => {
+  if (String(propertyKey).startsWith('debug')) {
     return {
       onInvoke: ({ args }) => console.log('debug invoke', args),
       onReturn: ({ result }) => result,
@@ -381,19 +496,20 @@ const DynamicHooks = Effect(({className}: HookContext): EffectHooks => {
 
 class DebugService {
   @DynamicHooks()
-  compute(value: number) {
+  debugCompute(value: number) {
     return value * 2;
   }
 }
 ```
 
-The factory is called **once per method invocation**, immediately before `onInvoke`, so it can inspect `args`, `propertyKey`, `className`, and every other field on `HookContext`.
+The factory is called **once at decoration time** with the `WrapContext` containing `propertyKey`, `parameterNames`, and `descriptor`. The resolved hooks are reused for every subsequent call. Each resolved hook still receives the full `HookContext` (including `args`, `argsObject`, `target`, and `className`) on every invocation.
 
 ## API Reference
 
 | Export | Type | Description |
 |--------|------|-------------|
-| `Effect` | Decorator | Unified class+method decorator with lifecycle hooks |
+| `Wrap` | Decorator | Foundational class+method decorator with raw method wrapping |
+| `Effect` | Decorator | Higher-level class+method decorator with lifecycle hooks (built on `Wrap`) |
 | `SetMeta` | Decorator | Store metadata on methods |
 | `getMeta` | Function | Retrieve metadata from methods |
 | `setMeta` | Function | Programmatically set metadata on functions |
@@ -401,6 +517,11 @@ The factory is called **once per method invocation**, immediately before `onInvo
 | `OnReturnHook` | Decorator | Convenience hook for `onReturn` |
 | `OnErrorHook` | Decorator | Convenience hook for `onError` |
 | `FinallyHook` | Decorator | Convenience hook for `finally` |
+| `WrapContext` | Type | Decoration-time context passed to `Wrap` outer factory (propertyKey, parameterNames, descriptor) |
+| `InvocationContext` | Type | Per-call context extending `WrapContext` with runtime fields (target, className, args, argsObject) |
+| `WrapFn` | Type | Wrapper function signature: `(context: WrapContext) => (method, context: InvocationContext) => R` |
+| `HookContext` | Type | Context passed to `Effect` hooks -- equivalent to `InvocationContext` with all fields |
+| `EffectHooks` | Type | Lifecycle hooks object for `Effect` (onInvoke, onReturn, onError, finally) |
 
 ## Advanced Example
 
