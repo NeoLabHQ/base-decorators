@@ -25,23 +25,21 @@ Basic decorator primitives for TypeScript. Writing decorators in TS is hard, thi
 Zero-dependency TypeScript library that provides low-level primitives for creating decorators. Instead of wrestling with property descriptors and prototype traversal, you use two levels of abstraction:
 
 - **`Wrap`** — the foundational primitive that gives you full control over method execution via a higher-order function
-- **`Effect`** — a higher-level abstraction built on `Wrap` that provides lifecycle hooks:
-  - `onInvoke` — fired before the method runs
-  - `onReturn` — fired after the method succeeds
-  - `onError` — fired when the method throws
-  - `finally` — fired after either success or failure
+- **`Effect`** — a higher-level abstraction that provides combined lifecycle hooks.
+- **`OnInvokeHook`** — decorator that fires before the method runs
+- **`OnReturnHook`** — decorator that fires after the method succeeds
+- **`OnErrorHook`** — decorator that fires when the method throws
+- **`FinallyHook`** — decorator that fires after either success or failure
 
 The library handles method wrapping, `this` preservation, async/sync support, parameter name extraction, and metadata management so you can focus on your decorator logic.
 
 ### Key Features
 
 - **Zero dependencies** — tiny footprint, no external packages required
-- **Two-level API** — `Wrap` for full control, `Effect` for structured lifecycle hooks
-- **Unified decorators** — both `Wrap` and `Effect` work on classes and methods
+- **Unified decorators** — all decorators work on classes and methods
 - **Full async support** — promises are handled automatically
 - **Pre-built args object** — arguments are mapped to parameter names and passed into every hook
-- **Metadata utilities** — `SetMeta`, `getMeta`, and `setMeta` for symbol-keyed method metadata
-- **TypeScript native** — written in TypeScript with full type definitions
+- **Metadata management** — Additional tools for storing and retrieving symbol-keyed method metadata
 
 ## Installation
 
@@ -51,7 +49,7 @@ npm install base-decorators
 
 ## Quick Start
 
-### Using Wrap (full control)
+### Using Wrap 
 
 `Wrap` is the foundational primitive. You receive the original method and a context, and return a replacement function:
 
@@ -61,9 +59,12 @@ import type { WrapContext } from 'base-decorators';
 
 const Log = () => Wrap((method, context: WrapContext) => {
   console.log('decorating', context.propertyKey);
+
   return (...args: unknown[]) => {
     console.log('called with', args);
+
     const result = method(...args);
+
     console.log('returned', result);
     return result;
   };
@@ -77,6 +78,7 @@ class Calculator {
 }
 
 const calc = new Calculator();
+// logs: "decorating add"
 calc.add(2, 3);
 // logs: "called with [2, 3]"
 // logs: "returned 5"
@@ -84,7 +86,7 @@ calc.add(2, 3);
 
 ### Using Effect (lifecycle hooks)
 
-`Effect` is built on top of `Wrap` and provides structured lifecycle hooks for common patterns:
+`Effect` provides combined lifecycle hooks for common patterns:
 
 ```typescript
 import { Effect } from 'base-decorators';
@@ -100,21 +102,14 @@ class Calculator {
 }
 
 const calc = new Calculator();
-calc.add(2, 3); // logs arguments and result
+calc.add(2, 3);
+// logs: "add called with [2, 3]"
+// logs: "result: 5"
 ```
 
 ## How It Works
 
-The library is organized in three layers, from low-level to high-level:
-
-```
-Wrap              (raw method wrapping — full control)
-  └─ Effect       (lifecycle hook orchestration — structured callbacks)
-       └─ OnInvokeHook, OnReturnHook, OnErrorHook, FinallyHook
-                  (convenience decorators — single-hook shortcuts)
-```
-
-**`Wrap`** is the foundational primitive. It accepts a factory function that receives the original method (already bound to `this`) and a `WrapContext`, and returns a replacement function. You control the entire execution flow:
+**`Wrap`** accepts a factory function that receives the original method (already bound to `this`) and a `WrapContext`, and returns a replacement function. You control the entire execution flow:
 
 ```typescript
 import { Wrap } from 'base-decorators';
@@ -128,7 +123,7 @@ const Log = () => Wrap((method, context: WrapContext) => {
 });
 ```
 
-**`Effect`** is built on top of `Wrap`. Instead of writing the full wrapping logic yourself, you provide lifecycle hooks and Effect handles the execution flow:
+**`Effect`**: Instead of writing the full wrapping logic yourself, you provide lifecycle hooks and Effect handles the execution flow:
 
 ```typescript
 import { Effect } from 'base-decorators';
@@ -139,7 +134,7 @@ const Log = () => Effect({
 });
 ```
 
-**Convenience hooks** are single-purpose decorators built on Effect for the most common patterns:
+**Convenience hooks** are single-purpose decorators for common patterns:
 
 ```typescript
 import { OnInvokeHook } from 'base-decorators';
@@ -147,70 +142,7 @@ import { OnInvokeHook } from 'base-decorators';
 const Log = () => OnInvokeHook(({ args }) => console.log('called with', args));
 ```
 
-Choose the level that fits your use case: `Wrap` when you need full control over execution, `Effect` when lifecycle hooks suit your pattern, or convenience hooks for simple single-hook scenarios.
-
 ## Usage
-
-### Wrap decorator
-
-Use `Wrap` when you need full control over how a method is executed. The wrapper function receives the original method (bound to the correct `this`) and a `WrapContext` with metadata about the decorated method:
-
-```typescript
-import { Wrap } from 'base-decorators';
-import type { WrapContext } from 'base-decorators';
-
-const Log = () => Wrap((method, context: WrapContext) => {
-  console.log('decorating', context.propertyKey);
-  return (...args: unknown[]) => {
-    console.log('method called with', args);
-    const result = method(...args);
-    console.log('method returned', result);
-    return result;
-  };
-});
-
-class Calculator {
-  @Log()
-  add(a: number, b: number) {
-    return a + b;
-  }
-}
-
-const calc = new Calculator();
-calc.add(2, 3);
-// logs: "method called with [2, 3]"
-// logs: "method returned 5"
-```
-
-### Async Wrap
-
-`Wrap` works naturally with async methods. Return an async replacement function to handle promises:
-
-```typescript
-import { Wrap } from 'base-decorators';
-import type { WrapContext } from 'base-decorators';
-
-const AsyncTimer = () => Wrap((method, context: WrapContext) => {
-  return async (...args: unknown[]) => {
-    const start = Date.now();
-    const result = await method(...args);
-    console.log(`${String(context.propertyKey)} took ${Date.now() - start}ms`);
-    return result;
-  };
-});
-
-class UserService {
-  @AsyncTimer()
-  async fetchUser(id: number) {
-    // async work...
-    return { id, name: 'Alice' };
-  }
-}
-
-const service = new UserService();
-await service.fetchUser(1);
-// logs: "fetchUser took 12ms"
-```
 
 ### Validate arguments with `OnInvokeHook`
 
@@ -273,6 +205,35 @@ class Service {
 
 ### Async hooks
 
+All decorators work naturally with async methods. Return an async replacement function to handle promises:
+
+```typescript
+import { Wrap } from 'base-decorators';
+import type { WrapContext } from 'base-decorators';
+
+const AsyncTimer = () => Wrap((method, context: WrapContext) => {
+  return async (...args: unknown[]) => {
+    const start = Date.now();
+    const result = await method(...args);
+    
+    console.log(`${String(context.propertyKey)} took ${Date.now() - start}ms`);
+    return result;
+  };
+});
+
+class UserService {
+  @AsyncTimer()
+  async fetchUser(id: number) {
+    // async work...
+    return { id, name: 'Alice' };
+  }
+}
+
+const service = new UserService();
+await service.fetchUser(1);
+// logs: "fetchUser took 12ms"
+```
+
 When the decorated method returns a `Promise`, all hooks may optionally return a `Promise` as well. `onReturn` receives the **unwrapped** resolved value, and the library automatically chains the returned promise so async hooks execute in the correct order.
 
 ```typescript
@@ -331,7 +292,7 @@ class Worker {
 
 ### Class and Method decorators
 
-`Wrap`, `Effect`, and all hook decorators can be used on both classes and methods out of the box.
+All hook decorators can be used on both classes and methods out of the box.
 
 ```typescript
 import { Effect } from 'base-decorators';
@@ -388,7 +349,7 @@ class Service {
 ```typescript
 const Log = (message: string) => Effect({ 
     onInvoke: () => console.log(message) 
-});
+}, Symbol('log'));
 
 const Validate = () => Effect({ 
     onInvoke: ({ args }) => {
