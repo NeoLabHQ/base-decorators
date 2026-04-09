@@ -53,8 +53,8 @@ import type {
 export const Effect = <R = unknown>(
   hooks: HooksOrFactory<R>,
   exclusionKey?: symbol,
-): ClassDecorator & MethodDecorator => {
-  const effectWrapFn: WrapFn = (
+): ClassDecorator & MethodDecorator => 
+  Wrap((
     boundMethod: (...args: unknown[]) => unknown,
     wrapContext: WrapContext,
   ) => {
@@ -83,10 +83,7 @@ export const Effect = <R = unknown>(
 
       return executeMethod();
     };
-  };
-
-  return Wrap(effectWrapFn, exclusionKey);
-};
+  }, exclusionKey);
 
 /**
  * Builds an object mapping parameter names to their values.
