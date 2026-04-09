@@ -9,7 +9,7 @@ describe('Wrap', () => {
   describe('applied to a method', () => {
     it('should delegate to WrapOnMethod and wrap the method', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       class TestService {
@@ -26,7 +26,7 @@ describe('Wrap', () => {
     });
 
     it('should set WRAP_APPLIED_KEY on the method descriptor', () => {
-      const wrapFn: WrapFn = (_context) => (invCtx, method) => method(...invCtx.args);
+      const wrapFn: WrapFn = (_context) => (method, invCtx) => method(...invCtx.args);
 
       class TestService {
         @Wrap(wrapFn)
@@ -48,7 +48,7 @@ describe('Wrap', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -77,14 +77,14 @@ describe('Wrap', () => {
       const methodCalls: string[] = [];
 
       const classWrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           classCalls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
       };
 
       const methodWrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           methodCalls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -111,7 +111,7 @@ describe('Wrap', () => {
     });
 
     it('should return the constructor when applied to a class', () => {
-      const wrapFn: WrapFn = (_context) => (invCtx, method) => method(...invCtx.args);
+      const wrapFn: WrapFn = (_context) => (method, invCtx) => method(...invCtx.args);
 
       @Wrap(wrapFn)
       class TestService {
@@ -129,7 +129,7 @@ describe('Wrap', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -165,7 +165,7 @@ describe('Wrap', () => {
 
     it('should not wrap the constructor', () => {
       const wrapFnSpy = vi.fn<WrapFn>((_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       });
 
       @Wrap(wrapFnSpy)
@@ -199,7 +199,7 @@ describe('Wrap', () => {
 
       const wrapFn: WrapFn = (context) => {
         receivedContext = context;
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       class TestService {
@@ -223,7 +223,7 @@ describe('Wrap', () => {
 
       const wrapFn: WrapFn = (context) => {
         receivedWrapCtx = context;
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           receivedInvCtx = invCtx;
           return method(...invCtx.args);
         };
@@ -255,7 +255,7 @@ describe('Wrap', () => {
 
       const wrapFn: WrapFn = (context) => {
         receivedContext = context as unknown as Record<string, unknown>;
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       class TestService {
@@ -276,7 +276,7 @@ describe('Wrap', () => {
       let receivedMethod: ((...args: unknown[]) => unknown) | undefined;
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           receivedMethod = method;
           return method(...invCtx.args);
         };
@@ -304,7 +304,7 @@ describe('Wrap', () => {
 
     it('should bind method to the correct instance for each invocation', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       class TestService {
@@ -327,7 +327,7 @@ describe('Wrap', () => {
   describe('sync method through Wrap', () => {
     it('should wrap a sync method and return its result unchanged', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       class Calculator {
@@ -343,7 +343,7 @@ describe('Wrap', () => {
 
     it('should allow Wrap to modify the sync return value', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           const result = method(...invCtx.args) as number;
           return result * 10;
         };
@@ -362,7 +362,7 @@ describe('Wrap', () => {
 
     it('should allow Wrap to intercept arguments for sync methods', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           // Intercept: double all numeric arguments
           const doubled = invCtx.args.map((a) =>
             typeof a === 'number' ? a * 2 : a,
@@ -387,7 +387,7 @@ describe('Wrap', () => {
   describe('async method through Wrap', () => {
     it('should wrap an async method and return its resolved value', async () => {
       const wrapFn: WrapFn = (_context) => {
-        return async (invCtx, method) => {
+        return async (method, invCtx) => {
           const result = await method(...invCtx.args);
           return result;
         };
@@ -408,7 +408,7 @@ describe('Wrap', () => {
 
     it('should allow Wrap to modify the async return value', async () => {
       const wrapFn: WrapFn = (_context) => {
-        return async (invCtx, method) => {
+        return async (method, invCtx) => {
           const result = (await method(...invCtx.args)) as { id: number; name: string };
           return { ...result, modified: true };
         };
@@ -429,7 +429,7 @@ describe('Wrap', () => {
 
     it('should propagate errors from async methods', async () => {
       const wrapFn: WrapFn = (_context) => {
-        return async (invCtx, method) => {
+        return async (method, invCtx) => {
           return method(...invCtx.args);
         };
       };
@@ -454,14 +454,14 @@ describe('Wrap', () => {
 
       const calls: string[] = [];
       const wrapFnA: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(`A:${String(context.propertyKey)}`);
           return method(...invCtx.args);
         };
       };
 
       const wrapFnB: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(`B:${String(context.propertyKey)}`);
           return method(...invCtx.args);
         };
@@ -489,14 +489,14 @@ describe('Wrap', () => {
       const methodCalls: string[] = [];
 
       const classWrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           classCalls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
       };
 
       const methodWrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           methodCalls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -529,7 +529,7 @@ describe('Wrap', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -557,7 +557,7 @@ describe('Wrap', () => {
 
     it('should mark method with exclusionKey when applied at method level', () => {
       const EXCLUSION_KEY = Symbol('customKey');
-      const wrapFn: WrapFn = (_context) => (invCtx, method) => method(...invCtx.args);
+      const wrapFn: WrapFn = (_context) => (method, invCtx) => method(...invCtx.args);
 
       class TestService {
         @Wrap(wrapFn, EXCLUSION_KEY)
@@ -579,7 +579,7 @@ describe('Wrap', () => {
 
   describe('invalid decorator context', () => {
     it('should throw Error when applied in an unsupported context', () => {
-      const wrapFn: WrapFn = (_context) => (invCtx, method) => method(...invCtx.args);
+      const wrapFn: WrapFn = (_context) => (method, invCtx) => method(...invCtx.args);
 
       const decorator = Wrap(wrapFn);
 
@@ -590,7 +590,7 @@ describe('Wrap', () => {
     });
 
     it('should throw Error with propertyKey present but descriptor missing', () => {
-      const wrapFn: WrapFn = (_context) => (invCtx, method) => method(...invCtx.args);
+      const wrapFn: WrapFn = (_context) => (method, invCtx) => method(...invCtx.args);
 
       const decorator = Wrap(wrapFn);
 

@@ -11,7 +11,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -42,7 +42,7 @@ describe('WrapOnClass', () => {
 
     it('should preserve correct return values from wrapped methods', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       @WrapOnClass(wrapFn)
@@ -65,7 +65,7 @@ describe('WrapOnClass', () => {
   describe('skips constructor', () => {
     it('should not fire the wrapper during construction', () => {
       const wrapFnSpy = vi.fn<WrapFn>((_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       });
 
       @WrapOnClass(wrapFnSpy)
@@ -97,7 +97,7 @@ describe('WrapOnClass', () => {
 
       const wrapFn: WrapFn = (context) => {
         wrappedNames.push(String(context.propertyKey));
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       @WrapOnClass(wrapFn)
@@ -130,7 +130,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -166,7 +166,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -195,7 +195,7 @@ describe('WrapOnClass', () => {
       let stored = 0;
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -226,7 +226,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -257,7 +257,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -295,7 +295,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -326,7 +326,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -359,14 +359,14 @@ describe('WrapOnClass', () => {
       const methodCalls: string[] = [];
 
       const classWrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           classCalls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
       };
 
       const methodWrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           methodCalls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -399,14 +399,14 @@ describe('WrapOnClass', () => {
       const methodCalls: string[] = [];
 
       const classWrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           classCalls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
       };
 
       const methodWrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           methodCalls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -439,7 +439,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -467,7 +467,7 @@ describe('WrapOnClass', () => {
 
     it('should set WRAP_APPLIED_KEY metadata on methods it wraps', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       @WrapOnClass(wrapFn)
@@ -490,7 +490,7 @@ describe('WrapOnClass', () => {
       const CUSTOM_KEY = Symbol('custom');
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       @WrapOnClass(wrapFn, CUSTOM_KEY)
@@ -513,7 +513,7 @@ describe('WrapOnClass', () => {
       const CUSTOM_KEY = Symbol('custom');
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       @WrapOnClass(wrapFn, CUSTOM_KEY)
@@ -541,14 +541,14 @@ describe('WrapOnClass', () => {
       const callsB: string[] = [];
 
       const wrapFnA: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           callsA.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
       };
 
       const wrapFnB: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           callsB.push(String(context.propertyKey));
           return method(...invCtx.args);
         };
@@ -575,7 +575,7 @@ describe('WrapOnClass', () => {
   describe('this binding is preserved', () => {
     it('should preserve this context in wrapped methods', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       @WrapOnClass(wrapFn)
@@ -599,7 +599,7 @@ describe('WrapOnClass', () => {
 
       const wrapFn: WrapFn = (context) => {
         capturedWrapContexts.push(context);
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           capturedInvCtx = invCtx;
           return method(...invCtx.args);
         };
@@ -639,7 +639,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
 
       const wrapFn: WrapFn = (context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           calls.push(String(context.propertyKey));
           return method(...invCtx.args);
         };

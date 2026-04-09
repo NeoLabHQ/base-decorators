@@ -15,7 +15,7 @@ describe('wrapFunction', () => {
   describe('basic wrapping', () => {
     it('should call wrapFn once at wrap time', () => {
       const wrapFnSpy = vi.fn<WrapFn>((_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       });
 
       function greet(name: string) {
@@ -48,7 +48,7 @@ describe('wrapFunction', () => {
 
       const wrapFn: WrapFn = (_context) => {
         wrapCount++;
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           callCount++;
           return method(...invCtx.args);
         };
@@ -90,7 +90,7 @@ describe('wrapFunction', () => {
 
       const wrapFn: WrapFn = (_context) => {
         wrapCount++;
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       function doWork() {
@@ -124,7 +124,7 @@ describe('wrapFunction', () => {
 
     it('should return the result from the inner function', () => {
       const wrapFn: WrapFn<number> = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           const result = method(...invCtx.args) as number;
           return result * 2;
         };
@@ -150,7 +150,7 @@ describe('wrapFunction', () => {
   describe('this binding', () => {
     it('should bind original method to the correct this context', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       const original: (...args: unknown[]) => unknown = function (
@@ -175,7 +175,7 @@ describe('wrapFunction', () => {
       let capturedMethod: ((...args: unknown[]) => unknown) | undefined;
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           capturedMethod = method;
           return method(...invCtx.args);
         };
@@ -209,7 +209,7 @@ describe('wrapFunction', () => {
 
       const wrapFn: WrapFn = (context) => {
         capturedContext = context;
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       function greet(name: string, greeting: string) {
@@ -236,7 +236,7 @@ describe('wrapFunction', () => {
 
       const wrapFn: WrapFn = (context) => {
         capturedContext = context;
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       function doWork(x: number) {
@@ -265,7 +265,7 @@ describe('wrapFunction', () => {
       let capturedInvCtx: InvocationContext | undefined;
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           capturedInvCtx = invCtx;
           return method(...invCtx.args);
         };
@@ -295,7 +295,7 @@ describe('wrapFunction', () => {
       let capturedInvCtx: InvocationContext | undefined;
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           capturedInvCtx = invCtx;
           return method(...invCtx.args);
         };
@@ -325,7 +325,7 @@ describe('wrapFunction', () => {
       let capturedInvCtx: InvocationContext | undefined;
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           capturedInvCtx = invCtx;
           return method(...invCtx.args);
         };
@@ -356,7 +356,7 @@ describe('wrapFunction', () => {
       let capturedInvCtx: InvocationContext | undefined;
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           capturedInvCtx = invCtx;
           return method(...invCtx.args);
         };
@@ -386,7 +386,7 @@ describe('wrapFunction', () => {
       let capturedInvCtx: InvocationContext | undefined;
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           capturedInvCtx = invCtx;
           return method(...invCtx.args);
         };
@@ -417,7 +417,7 @@ describe('wrapFunction', () => {
       const capturedInvContexts: InvocationContext[] = [];
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           capturedInvContexts.push(invCtx);
           return method(...invCtx.args);
         };
@@ -451,7 +451,7 @@ describe('wrapFunction', () => {
   describe('async methods', () => {
     it('should work with async methods', async () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       async function fetchData(id: number): Promise<string> {
@@ -474,7 +474,7 @@ describe('wrapFunction', () => {
 
     it('should allow async wrapper to modify async results', async () => {
       const wrapFn: WrapFn<Promise<string>> = (_context) => {
-        return async (invCtx, method) => {
+        return async (method, invCtx) => {
           const result = (await method(...invCtx.args)) as string;
           return `modified: ${result}`;
         };
@@ -502,7 +502,7 @@ describe('wrapFunction', () => {
       const asyncError = new Error('async failure');
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       async function failingAsync() {
@@ -527,7 +527,7 @@ describe('wrapFunction', () => {
       const syncError = new Error('sync failure');
 
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => method(...invCtx.args);
+        return (method, invCtx) => method(...invCtx.args);
       };
 
       function failing(): never {

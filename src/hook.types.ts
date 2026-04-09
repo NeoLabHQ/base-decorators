@@ -39,14 +39,14 @@ export interface InvocationContext extends WrapContext {
  * Factory function accepted by the Wrap decorator.
  *
  * Called **once at decoration time** with a {@link WrapContext}. Returns an
- * inner function that is called on every invocation with an
- * {@link InvocationContext} and the `this`-bound original method.
+ * inner function that is called on every invocation with the `this`-bound
+ * original method and an {@link InvocationContext}.
  *
  * @typeParam R - The return type produced by the inner function
  */
 export type WrapFn<R = unknown> = (
   context: WrapContext,
-) => (context: InvocationContext, method: (...args: unknown[]) => unknown) => R;
+) => (method: (...args: unknown[]) => unknown, context: InvocationContext) => R;
 
 /**
  * Shared context passed to every lifecycle hook.

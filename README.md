@@ -60,7 +60,7 @@ const Log = () => Wrap((context: WrapContext) => {
   // Outer function: called once at decoration time
   console.log('decorating', context.propertyKey);
 
-  return ({args}, method) => {
+  return (method, {args}) => {
     // Inner function: called on every invocation
     console.log('called with', args);
 
@@ -114,7 +114,7 @@ calc.add(2, 3);
 
 ## How It Works
 
-**`Wrap`** accepts a factory function that receives a `WrapContext` at decoration time and returns an inner function. The inner function is called on every invocation with an `InvocationContext` and the `this`-bound original method. You control the entire execution flow:
+**`Wrap`** accepts a factory function that receives a `WrapContext` at decoration time and returns an inner function. The inner function is called on every invocation with the `this`-bound original method and an `InvocationContext`. You control the entire execution flow:
 
 ```typescript
 import { Wrap } from 'base-decorators';
@@ -122,7 +122,7 @@ import type { WrapContext, InvocationContext } from 'base-decorators';
 
 const Log = () => Wrap((context: WrapContext) => {
   // Outer: called once at decoration time. WrapContext has propertyKey, parameterNames, descriptor.
-  return ({ args, className }: InvocationContext, method) => {
+  return (method, { args, className }: InvocationContext) => {
     // Inner: called on every invocation. InvocationContext extends WrapContext with target, className, args, argsObject.
     console.log(`${className}.${String(context.propertyKey)} called`);
     return method(...args);
@@ -219,7 +219,7 @@ import { Wrap } from 'base-decorators';
 import type { WrapContext, InvocationContext } from 'base-decorators';
 
 const AsyncTimer = () => Wrap((context: WrapContext) => {
-  return async ({ args }, method) => {
+  return async (method, { args }) => {
     const start = Date.now();
     const result = await method(...args);
     
@@ -519,7 +519,7 @@ The factory is called **once at decoration time** with the `WrapContext` contain
 | `FinallyHook` | Decorator | Convenience hook for `finally` |
 | `WrapContext` | Type | Decoration-time context passed to `Wrap` outer factory (propertyKey, parameterNames, descriptor) |
 | `InvocationContext` | Type | Per-call context extending `WrapContext` with runtime fields (target, className, args, argsObject) |
-| `WrapFn` | Type | Wrapper function signature: `(context: WrapContext) => (context: InvocationContext, method) => R` |
+| `WrapFn` | Type | Wrapper function signature: `(context: WrapContext) => (method, context: InvocationContext) => R` |
 | `HookContext` | Type | Context passed to `Effect` hooks -- equivalent to `InvocationContext` with all fields |
 | `EffectHooks` | Type | Lifecycle hooks object for `Effect` (onInvoke, onReturn, onError, finally) |
 

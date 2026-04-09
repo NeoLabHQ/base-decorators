@@ -61,8 +61,8 @@ export const Effect = <R = unknown>(
     const resolvedHooks = resolveHooks(hooks, wrapContext);
 
     return (
-      invocationContext: InvocationContext,
       boundMethod: (...args: unknown[]) => unknown,
+      invocationContext: InvocationContext,
     ): unknown => {
       const hookContext: HookContext = { ...invocationContext };
 

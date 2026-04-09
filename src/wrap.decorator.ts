@@ -22,8 +22,8 @@ import type { WrapFn } from './hook.types';
  * @typeParam R - The return type expected from the wrapper function
  * @param wrapFn       - Factory called once at decoration time with a
  *                        {@link WrapContext}. Returns the inner function that
- *                        receives an {@link InvocationContext} and the
- *                        `this`-bound original method on each call.
+ *                        receives the `this`-bound original method and an
+ *                        {@link InvocationContext} on each call.
  * @param exclusionKey - Optional symbol used to mark the wrapped method. When
  *                        provided, this key is set instead of the default
  *                        `WRAP_APPLIED_KEY`. This allows different
@@ -36,7 +36,7 @@ import type { WrapFn } from './hook.types';
  * ```ts
  * // Method-level usage
  * class Service {
- *   \@Wrap((ctx) => (invCtx, method) => {
+ *   \@Wrap((ctx) => (method, invCtx) => {
  *     console.log(`${invCtx.className}.${String(ctx.propertyKey)} called`);
  *     return method(...invCtx.args);
  *   })
@@ -44,7 +44,7 @@ import type { WrapFn } from './hook.types';
  * }
  *
  * // Class-level usage
- * \@Wrap((ctx) => (invCtx, method) => {
+ * \@Wrap((ctx) => (method, invCtx) => {
  *   console.log(`${String(ctx.propertyKey)} called`);
  *   return method(...invCtx.args);
  * })

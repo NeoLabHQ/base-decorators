@@ -84,9 +84,9 @@ describe('hook.types', () => {
   });
 
   describe('WrapFn', () => {
-    it('accepts WrapContext and returns a function taking InvocationContext and method', () => {
+    it('accepts WrapContext and returns a function taking method and InvocationContext', () => {
       const wrapFn: WrapFn = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           return method(...invCtx.args);
         };
       };
@@ -108,12 +108,12 @@ describe('hook.types', () => {
         args: [42],
         argsObject: undefined,
       };
-      expect(factory(invCtx, fakeMethod)).toBe(42);
+      expect(factory(fakeMethod, invCtx)).toBe(42);
     });
 
     it('supports generic return type parameter', () => {
       const wrapFn: WrapFn<number> = (_context) => {
-        return (invCtx, method) => {
+        return (method, invCtx) => {
           return (method(...invCtx.args) as number) * 2;
         };
       };
@@ -135,7 +135,7 @@ describe('hook.types', () => {
         args: [],
         argsObject: undefined,
       };
-      expect(factory(invCtx, fakeMethod)).toBe(42);
+      expect(factory(fakeMethod, invCtx)).toBe(42);
     });
   });
 

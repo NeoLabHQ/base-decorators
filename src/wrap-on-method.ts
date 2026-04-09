@@ -24,8 +24,8 @@ export const WRAP_KEY: unique symbol = Symbol('wrap');
  * @typeParam R - The return type of the decorated method
  * @param wrapFn       - Factory called once at decoration time with a
  *                        {@link WrapContext}. Returns the inner function that
- *                        receives an {@link InvocationContext} and the
- *                        `this`-bound original method on each call.
+ *                        receives the `this`-bound original method and an
+ *                        {@link InvocationContext} on each call.
  * @param exclusionKey - Optional symbol used to mark the wrapped method. When
  *                        provided, this key is set instead of the default
  *                        {@link WRAP_KEY}. This allows different
@@ -37,7 +37,7 @@ export const WRAP_KEY: unique symbol = Symbol('wrap');
  * @example
  * ```ts
  * class Service {
- *   \@WrapOnMethod((ctx) => (invCtx, method) => {
+ *   \@WrapOnMethod((ctx) => (method, invCtx) => {
  *     console.log(`${String(ctx.propertyKey)} called with`, invCtx.args);
  *     return method(...invCtx.args);
  *   })
@@ -153,8 +153,8 @@ export const buildArgsObject = (
  * @param originalMethod - The function to wrap
  * @param wrapFn         - Factory called once at wrap time with a
  *                          {@link WrapContext}. Returns the inner function
- *                          that receives an {@link InvocationContext} and
- *                          the `this`-bound method on each call.
+ *                          that receives the `this`-bound method and an
+ *                          {@link InvocationContext} on each call.
  * @param options        - Decoration-time metadata for the method being wrapped
  * @returns A function that, when called, binds the original method, builds
  *          an {@link InvocationContext}, and delegates to the inner function
@@ -199,7 +199,7 @@ export const wrapMethod = <R = unknown>(
       argsObject,
     };
 
-    return factoryFn(invocationContext, boundMethod);
+    return factoryFn(boundMethod, invocationContext);
   };
 };
 
