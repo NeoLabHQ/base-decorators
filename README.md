@@ -15,8 +15,7 @@ Basic decorator primitives for TypeScript. Writing decorators in TS is hard, thi
 [Usage](#usage) •
 [Options](#options) •
 [API Reference](#api-reference) •
-[Advanced Example](#advanced-example) •
-[Wrap Decorator](#wrap-decorator)
+[Advanced Example](#advanced-example)
 
 </div>
 
