@@ -5,7 +5,6 @@ import type {
   HooksOrFactory,
   UnwrapPromise,
   WrapContext,
-  WrapFn,
 } from './hook.types';
 
 /**
