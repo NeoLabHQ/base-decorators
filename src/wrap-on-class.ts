@@ -24,7 +24,9 @@ import { WrapOnMethod, WRAP_KEY } from './wrap-on-method';
  * - Methods marked with `exclusionKey` metadata (double-wrap prevention and
  *   explicit exclusion via e.g. `@SetMeta(key, true)`)
  *
- * @typeParam R - The return type expected from the wrapped methods
+ * @typeParam T      - The class instance type. Defaults to `object`.
+ * @typeParam TArgs  - Tuple of method parameter types. Defaults to `unknown[]`.
+ * @typeParam TReturn - The method return type. Defaults to `unknown`.
  * @param wrapFn       - Factory forwarded to {@link WrapOnMethod} for each
  *                        eligible method
  * @param exclusionKey - Symbol used to detect already-decorated and excluded
@@ -37,9 +39,9 @@ import { WrapOnMethod, WRAP_KEY } from './wrap-on-method';
  * ```ts
  * const LOG_KEY = Symbol('log');
  *
- * \@WrapOnClass((ctx) => (method, invCtx) => {
- *   console.log(`${invCtx.className}.${String(ctx.propertyKey)} called`);
- *   return method(...invCtx.args);
+ * \@WrapOnClass((method, ctx) => (...args) => {
+ *   console.log(`${ctx.className}.${String(ctx.propertyKey)} called`);
+ *   return method(...args);
  * }, LOG_KEY)
  * class Service {
  *   doWork() { return 42; }
@@ -49,11 +51,15 @@ import { WrapOnMethod, WRAP_KEY } from './wrap-on-method';
  * }
  * ```
  */
-export const WrapOnClass = <R = unknown>(
-  wrapFn: WrapFn<R>,
+export const WrapOnClass = <
+  T extends object = object,
+  TArgs extends unknown[] = unknown[],
+  TReturn = unknown,
+>(
+  wrapFn: WrapFn<T, TArgs, TReturn>,
   exclusionKey: symbol = WRAP_KEY,
-): ClassDecorator => {
-  const methodDecorator = WrapOnMethod(wrapFn, exclusionKey);
+): ClassDecorator => { // TODO: add type inference for class
+  const methodDecorator = WrapOnMethod<T, TArgs, TReturn>(wrapFn, exclusionKey);
 
   return (target: Function): void => {
     const prototype = target.prototype as Record<string, unknown>;

@@ -1,6 +1,5 @@
 // Internal (not exported): wrap-on-class.ts
-export { wrapMethod as wrapFunction, buildArgsObject } from './wrap-on-method';
-export type { WrapMethodOptions } from './wrap-on-method';
+export { WRAP_KEY, type WrapMethodOptions } from './wrap-on-method';
 export * from './wrap.decorator';
 export * from './effect.decorator';
 

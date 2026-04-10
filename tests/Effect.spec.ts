@@ -2,14 +2,18 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { Effect } from '../src/effect.decorator';
 import { SetMeta, getMeta } from '../src/set-meta.decorator';
-import type { EffectHooks } from '../src/set-meta.decorator';
+import type { EffectHooks, HooksOrFactory } from '../src/hook.types';
+
+/** Permissive Effect wrapper for runtime-focused tests where type inference is not under test. */
+const AnyEffect = (hooks: HooksOrFactory<object, any[], any>, exclusionKey?: symbol) =>
+  Effect<object, any[], any>(hooks, exclusionKey);
 
 describe('Effect', () => {
   describe('applied to a method', () => {
     it('should fire hooks correctly for sync method', () => {
       const callOrder: string[] = [];
 
-      const hooks: EffectHooks<string> = {
+      const hooks: EffectHooks = {
         onInvoke: () => callOrder.push('onInvoke'),
         onReturn: ({ result }) => {
           callOrder.push('onReturn');
@@ -19,7 +23,7 @@ describe('Effect', () => {
       };
 
       class TestService {
-        @Effect(hooks)
+        @AnyEffect(hooks)
         greet(name: string) {
           callOrder.push('original');
           return `hello ${name}`;
@@ -37,7 +41,7 @@ describe('Effect', () => {
       const onReturn = vi.fn(({ result }: { result: unknown }) => result);
 
       class TestService {
-        @Effect({ onReturn })
+        @AnyEffect({ onReturn })
         async fetchData(id: number) {
           return { id, name: 'test' };
         }
@@ -55,7 +59,7 @@ describe('Effect', () => {
       const onError = vi.fn(({ error }: { error: unknown }) => { throw error; });
 
       class TestService {
-        @Effect({ onError })
+        @AnyEffect({ onError })
         failing() {
           throw testError;
         }
@@ -72,7 +76,7 @@ describe('Effect', () => {
     it('should wrap all methods and fire hooks for each', () => {
       const onReturn = vi.fn(({ result }: { result: unknown }) => result);
 
-      @Effect({ onReturn })
+      @AnyEffect({ onReturn })
       class TestService {
         methodA() {
           return 'a';
@@ -93,7 +97,7 @@ describe('Effect', () => {
     it('should not wrap the constructor', () => {
       const onInvoke = vi.fn();
 
-      @Effect({ onInvoke })
+      @AnyEffect({ onInvoke })
       class TestService {
         value: number;
 
@@ -119,7 +123,7 @@ describe('Effect', () => {
     it('should fire all lifecycle hooks in correct order for class methods', () => {
       const callOrder: string[] = [];
 
-      const hooks: EffectHooks<string> = {
+      const hooks: EffectHooks = {
         onInvoke: () => callOrder.push('onInvoke'),
         onReturn: ({ result }) => {
           callOrder.push('onReturn');
@@ -132,7 +136,7 @@ describe('Effect', () => {
         finally: () => callOrder.push('finally'),
       };
 
-      @Effect(hooks)
+      @AnyEffect(hooks)
       class TestService {
         greet(name: string) {
           callOrder.push('original');
@@ -153,9 +157,9 @@ describe('Effect', () => {
       const classOnReturn = vi.fn(({ result }: { result: unknown }) => result);
       const methodOnReturn = vi.fn(({ result }: { result: unknown }) => result);
 
-      @Effect({ onReturn: classOnReturn })
+      @AnyEffect({ onReturn: classOnReturn })
       class TestService {
-        @Effect({ onReturn: methodOnReturn })
+        @AnyEffect({ onReturn: methodOnReturn })
         decoratedMethod() {
           return 'result';
         }
@@ -179,9 +183,9 @@ describe('Effect', () => {
       const classOnInvoke = vi.fn();
       const methodOnInvoke = vi.fn();
 
-      @Effect({ onInvoke: classOnInvoke })
+      @AnyEffect({ onInvoke: classOnInvoke })
       class TestService {
-        @Effect({ onInvoke: methodOnInvoke })
+        @AnyEffect({ onInvoke: methodOnInvoke })
         async fetchData(id: number) {
           return { id };
         }
@@ -204,11 +208,11 @@ describe('Effect', () => {
     it('should produce correct results when method-level Effect wins', () => {
       const methodOnReturn = vi.fn(({ result }: { result: string }) => `${result}-method-processed`);
 
-      @Effect({
+      @AnyEffect({
         onReturn: ({ result }: { result: string }) => `${result}-class-processed`,
       })
       class TestService {
-        @Effect({ onReturn: methodOnReturn })
+        @AnyEffect({ onReturn: methodOnReturn })
         targeted() {
           return 'base';
         }
@@ -232,7 +236,7 @@ describe('Effect', () => {
       const EXCLUSION_KEY = Symbol('noEffect');
       const onReturn = vi.fn(({ result }: { result: unknown }) => result);
 
-      @Effect({ onReturn }, EXCLUSION_KEY)
+      @AnyEffect({ onReturn }, EXCLUSION_KEY)
       class TestService {
         @SetMeta(EXCLUSION_KEY, true)
         excluded() {
@@ -257,7 +261,7 @@ describe('Effect', () => {
       const onReturn = vi.fn(({ result }: { result: unknown }) => result);
 
       class TestService {
-        @Effect({ onReturn }, EXCLUSION_KEY)
+        @AnyEffect({ onReturn }, EXCLUSION_KEY)
         myMethod() {
           return 'result';
         }
@@ -282,9 +286,9 @@ describe('Effect', () => {
       const classOnReturn = vi.fn(({ result }: { result: unknown }) => result);
       const methodOnReturn = vi.fn(({ result }: { result: unknown }) => result);
 
-      @Effect({ onReturn: classOnReturn }, EXCLUSION_KEY)
+      @AnyEffect({ onReturn: classOnReturn }, EXCLUSION_KEY)
       class TestService {
-        @Effect({ onReturn: methodOnReturn }, EXCLUSION_KEY)
+        @AnyEffect({ onReturn: methodOnReturn }, EXCLUSION_KEY)
         decoratedMethod() {
           return 'result';
         }
@@ -306,20 +310,20 @@ describe('Effect', () => {
   });
 
   describe('factory hook resolution', () => {
-    it('should call factory ONCE at decoration time, not per invocation', () => {
+    it('should call factory ONCE on first invocation, not per invocation', () => {
       const factorySpy = vi.fn(() => ({
         onReturn: ({ result }: { result: unknown }) => result,
       }));
 
       class TestService {
-        @Effect(factorySpy)
+        @AnyEffect(factorySpy)
         doWork() {
           return 42;
         }
       }
 
-      // Factory called at decoration time
-      expect(factorySpy).toHaveBeenCalledTimes(1);
+      // Factory NOT called at decoration time (lazy init)
+      expect(factorySpy).not.toHaveBeenCalled();
 
       const service = new TestService();
 
@@ -333,20 +337,20 @@ describe('Effect', () => {
       expect(factorySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should call factory once at decoration time, reuse for all instances', () => {
+    it('should call factory once on first invocation, reuse for all instances', () => {
       const factorySpy = vi.fn(() => ({
         onReturn: ({ result }: { result: unknown }) => result,
       }));
 
       class TestService {
-        @Effect(factorySpy)
+        @AnyEffect(factorySpy)
         doWork() {
           return 42;
         }
       }
 
-      // Factory called once at decoration time
-      expect(factorySpy).toHaveBeenCalledTimes(1);
+      // Factory NOT called at decoration time
+      expect(factorySpy).not.toHaveBeenCalled();
 
       const serviceA = new TestService();
       const serviceB = new TestService();
@@ -362,7 +366,7 @@ describe('Effect', () => {
       expect(factorySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should pass WrapContext fields to factory (propertyKey, parameterNames, descriptor)', () => {
+    it('should pass WrapContext fields to factory (propertyKey, parameterNames, descriptor, target, className)', () => {
       let receivedContext: Record<string, unknown> | undefined;
 
       const factory = (ctx: Record<string, unknown>) => {
@@ -373,42 +377,22 @@ describe('Effect', () => {
       };
 
       class TestService {
-        @Effect(factory as Parameters<typeof Effect>[0])
+        @AnyEffect(factory as Parameters<typeof Effect>[0])
         greet(name: string, greeting: string) {
           return `${greeting} ${name}`;
         }
       }
-      void TestService;
 
-      // Factory called at decoration time
+      const service = new TestService();
+      service.greet('world', 'hi');
+
+      // Factory called on first invocation
       expect(receivedContext).toBeDefined();
       expect(receivedContext!['propertyKey']).toBe('greet');
       expect(receivedContext!['parameterNames']).toEqual(['name', 'greeting']);
       expect(receivedContext!['descriptor']).toBeDefined();
-    });
-
-    it('should NOT pass args, argsObject, target, or className to factory', () => {
-      let receivedContext: Record<string, unknown> | undefined;
-
-      const factory = (ctx: Record<string, unknown>) => {
-        receivedContext = ctx;
-        return {};
-      };
-
-      class TestService {
-        @Effect(factory as Parameters<typeof Effect>[0])
-        doWork(x: number) {
-          return x;
-        }
-      }
-      void TestService;
-
-      // Factory is called at decoration time, no runtime fields available
-      expect(receivedContext).toBeDefined();
-      expect(receivedContext!['args']).toBeUndefined();
-      expect(receivedContext!['argsObject']).toBeUndefined();
-      expect(receivedContext!['target']).toBeUndefined();
-      expect(receivedContext!['className']).toBeUndefined();
+      expect(receivedContext!['target']).toBe(service);
+      expect(receivedContext!['className']).toBe('TestService');
     });
 
     it('should pass full HookContext to each resolved hook per invocation', () => {
@@ -422,7 +406,7 @@ describe('Effect', () => {
       });
 
       class TestService {
-        @Effect(factory as Parameters<typeof Effect>[0])
+        @AnyEffect(factory as Parameters<typeof Effect>[0])
         greet(name: string) {
           return `hello ${name}`;
         }
@@ -458,7 +442,7 @@ describe('Effect', () => {
       });
 
       class TestService {
-        @Effect(factory as Parameters<typeof Effect>[0])
+        @AnyEffect(factory as Parameters<typeof Effect>[0])
         greet(name: string) {
           callOrder.push('original');
           return `hello ${name}`;
@@ -482,7 +466,7 @@ describe('Effect', () => {
         onReturn: ({ result }: { result: unknown }) => result,
       }));
 
-      @Effect(factorySpy)
+      @AnyEffect(factorySpy)
       class TestService {
         methodA() {
           return 'a';
@@ -493,15 +477,14 @@ describe('Effect', () => {
         }
       }
 
-      // Factory called once per method at decoration time
-      // (WrapOnClass creates separate WrapOnMethod per method)
-      expect(factorySpy).toHaveBeenCalledTimes(2);
+      // Factory NOT called at decoration time (lazy init)
+      expect(factorySpy).not.toHaveBeenCalled();
 
       const service = new TestService();
       service.methodA();
       service.methodB();
 
-      // Still 2 (not called again per invocation)
+      // Factory called once per method on first invocation
       expect(factorySpy).toHaveBeenCalledTimes(2);
     });
   });

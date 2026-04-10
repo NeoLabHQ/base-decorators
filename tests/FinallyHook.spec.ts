@@ -1,15 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { FinallyHook } from '../src/finally.hook';
+import type { FinallyHookType } from '../src/hook.types';
+
+/** Permissive FinallyHook wrapper for runtime-focused tests where type inference is not under test. */
+const AnyFinallyHook = (callback: FinallyHookType<object, any[], any>, exclusionKey?: symbol) =>
+  FinallyHook<object, any[], any>(callback, exclusionKey);
 
 describe('FinallyHook', () => {
   describe('applied to a method', () => {
     it('should fire callback after sync method succeeds', () => {
       const callOrder: string[] = [];
-      const callback = vi.fn(() => callOrder.push('finally'));
+      const callback = vi.fn(() => { callOrder.push('finally'); });
 
       class TestService {
-        @FinallyHook(callback)
+        @AnyFinallyHook(callback)
         greet(name: string) {
           callOrder.push('original');
           return `hello ${name}`;
@@ -27,10 +32,10 @@ describe('FinallyHook', () => {
     it('should fire callback after sync method throws', () => {
       const callOrder: string[] = [];
       const testError = new Error('failure');
-      const callback = vi.fn(() => callOrder.push('finally'));
+      const callback = vi.fn(() => { callOrder.push('finally'); });
 
       class TestService {
-        @FinallyHook(callback)
+        @AnyFinallyHook(callback)
         failing() {
           callOrder.push('original');
           throw testError;
@@ -45,10 +50,10 @@ describe('FinallyHook', () => {
 
     it('should fire callback after async method resolves', async () => {
       const callOrder: string[] = [];
-      const callback = vi.fn(() => callOrder.push('finally'));
+      const callback = vi.fn(() => { callOrder.push('finally'); });
 
       class TestService {
-        @FinallyHook(callback)
+        @AnyFinallyHook(callback)
         async fetchData(id: number) {
           callOrder.push('original');
           return { id };
@@ -66,10 +71,10 @@ describe('FinallyHook', () => {
     it('should fire callback after async method rejects', async () => {
       const callOrder: string[] = [];
       const testError = new Error('async failure');
-      const callback = vi.fn(() => callOrder.push('finally'));
+      const callback = vi.fn(() => { callOrder.push('finally'); });
 
       class TestService {
-        @FinallyHook(callback)
+        @AnyFinallyHook(callback)
         async failing() {
           callOrder.push('original');
           throw testError;
@@ -86,7 +91,7 @@ describe('FinallyHook', () => {
       const callback = vi.fn();
 
       class TestService {
-        @FinallyHook(callback)
+        @AnyFinallyHook(callback)
         doWork(a: number, b: string) {
           return `${a}-${b}`;
         }
@@ -111,7 +116,7 @@ describe('FinallyHook', () => {
       const callback = vi.fn();
       const testError = new Error('method B error');
 
-      @FinallyHook(callback)
+      @AnyFinallyHook(callback)
       class TestService {
         methodA() {
           return 'a';
@@ -132,7 +137,7 @@ describe('FinallyHook', () => {
     it('should not fire callback during construction', () => {
       const callback = vi.fn();
 
-      @FinallyHook(callback)
+      @AnyFinallyHook(callback)
       class TestService {
         value: number;
 

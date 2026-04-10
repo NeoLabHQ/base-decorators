@@ -11,7 +11,7 @@
  * function example(id: number, name: string = 'default') {}
  * getParameterNames(example) // Returns: ['id', 'name']
  */
-export const getParameterNames = (func: (...args: unknown[]) => unknown): string[] => {
+export const getParameterNames = <TArgs extends unknown[], TReturn>(func: (...args: TArgs) => TReturn): string[] => {
   const funcStr = func.toString();
   const match = funcStr.match(/\(([^)]*)\)/);
 

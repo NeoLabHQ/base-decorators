@@ -1,15 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { OnInvokeHook } from '../src/on-invoke.hook';
+import type { OnInvokeHookType } from '../src/hook.types';
+
+/** Permissive OnInvokeHook wrapper for runtime-focused tests where type inference is not under test. */
+const AnyOnInvokeHook = (callback: OnInvokeHookType<object, any[], any>, exclusionKey?: symbol) =>
+  OnInvokeHook<object, any[], any>(callback, exclusionKey);
 
 describe('OnInvokeHook', () => {
   describe('applied to a method', () => {
     it('should fire callback before sync method executes', () => {
       const callOrder: string[] = [];
-      const callback = vi.fn(() => callOrder.push('onInvoke'));
+      const callback = vi.fn(() => { callOrder.push('onInvoke'); });
 
       class TestService {
-        @OnInvokeHook(callback)
+        @AnyOnInvokeHook(callback)
         greet(name: string) {
           callOrder.push('original');
           return `hello ${name}`;
@@ -26,10 +31,10 @@ describe('OnInvokeHook', () => {
 
     it('should fire callback before async method executes', async () => {
       const callOrder: string[] = [];
-      const callback = vi.fn(() => callOrder.push('onInvoke'));
+      const callback = vi.fn(() => { callOrder.push('onInvoke'); });
 
       class TestService {
-        @OnInvokeHook(callback)
+        @AnyOnInvokeHook(callback)
         async fetchData(id: number) {
           callOrder.push('original');
           return { id };
@@ -48,7 +53,7 @@ describe('OnInvokeHook', () => {
       const callback = vi.fn();
 
       class TestService {
-        @OnInvokeHook(callback)
+        @AnyOnInvokeHook(callback)
         doWork(a: number, b: string) {
           return `${a}-${b}`;
         }
@@ -72,7 +77,7 @@ describe('OnInvokeHook', () => {
       const testError = new Error('failure');
 
       class TestService {
-        @OnInvokeHook(callback)
+        @AnyOnInvokeHook(callback)
         failing() {
           throw testError;
         }
@@ -88,7 +93,7 @@ describe('OnInvokeHook', () => {
     it('should fire callback before each method executes', () => {
       const callback = vi.fn();
 
-      @OnInvokeHook(callback)
+      @AnyOnInvokeHook(callback)
       class TestService {
         methodA() {
           return 'a';
@@ -109,7 +114,7 @@ describe('OnInvokeHook', () => {
     it('should not fire callback during construction', () => {
       const callback = vi.fn();
 
-      @OnInvokeHook(callback)
+      @AnyOnInvokeHook(callback)
       class TestService {
         value: number;
 

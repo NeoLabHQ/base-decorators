@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { OnErrorHook } from '../src/on-error.hook';
-import type { OnErrorContext } from '../src/hook.types';
+import type { OnErrorContext, OnErrorHookType } from '../src/hook.types';
+
+/** Permissive OnErrorHook wrapper for runtime-focused tests where type inference is not under test. */
+const AnyOnErrorHook = (callback: OnErrorHookType<object, any[], any>, exclusionKey?: symbol) =>
+  OnErrorHook<object, any[], any>(callback, exclusionKey);
 
 describe('OnErrorHook', () => {
   describe('applied to a method', () => {
@@ -10,7 +14,7 @@ describe('OnErrorHook', () => {
       const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
-        @OnErrorHook(callback)
+        @AnyOnErrorHook(callback)
         failing() {
           throw testError;
         }
@@ -27,7 +31,7 @@ describe('OnErrorHook', () => {
       const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
-        @OnErrorHook(callback)
+        @AnyOnErrorHook(callback)
         async failing() {
           throw testError;
         }
@@ -43,7 +47,7 @@ describe('OnErrorHook', () => {
       const callback = vi.fn(() => 'recovered');
 
       class TestService {
-        @OnErrorHook(callback)
+        @AnyOnErrorHook(callback)
         failing(): string {
           throw new Error('oops');
         }
@@ -60,7 +64,7 @@ describe('OnErrorHook', () => {
       const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
-        @OnErrorHook(callback)
+        @AnyOnErrorHook(callback)
         succeeding() {
           return 'success';
         }
@@ -78,7 +82,7 @@ describe('OnErrorHook', () => {
       const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
       class TestService {
-        @OnErrorHook(callback)
+        @AnyOnErrorHook(callback)
         failing(input: string) {
           throw testError;
         }
@@ -103,7 +107,7 @@ describe('OnErrorHook', () => {
       const testErrorB = new Error('error B');
       const callback = vi.fn((ctx: OnErrorContext) => { throw ctx.error; });
 
-      @OnErrorHook(callback)
+      @AnyOnErrorHook(callback)
       class TestService {
         methodA() {
           throw testErrorA;

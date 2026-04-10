@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { wrapMethod } from '../src/wrap-on-method';
-import type { WrapFn, WrapContext, InvocationContext } from '../src/hook.types';
+import type { WrapFn, WrapContext } from '../src/hook.types';
+
+/** Permissive WrapFn alias for runtime-focused tests where type inference is not under test. */
+type AnyWrapFn = WrapFn<object, any[], any>;
 
 /**
  * Helper that simulates how {@link WrapOnMethod} extracts the original
@@ -13,9 +16,9 @@ const asMethod = (fn: Function): ((...args: unknown[]) => unknown) =>
 
 describe('wrapFunction', () => {
   describe('basic wrapping', () => {
-    it('should call wrapFn once at wrap time', () => {
-      const wrapFnSpy = vi.fn<WrapFn>((_context) => {
-        return (method, invCtx) => method(...invCtx.args);
+    it('should call wrapFn once on first invocation, not at wrap time', () => {
+      const wrapFnSpy = vi.fn<AnyWrapFn>((method, _context) => {
+        return (...args) => method(...args);
       });
 
       function greet(name: string) {
@@ -31,14 +34,14 @@ describe('wrapFunction', () => {
         descriptor,
       });
 
-      // wrapFn is called immediately at wrap time
-      expect(wrapFnSpy).toHaveBeenCalledTimes(1);
+      // wrapFn is NOT called at wrap time (lazy init)
+      expect(wrapFnSpy).not.toHaveBeenCalled();
 
       const instance = { constructor: { name: 'TestService' } };
       const result = wrapped.call(instance, 'world');
 
       expect(result).toBe('hello world');
-      // Still called only once (wrap time)
+      // Called once on first invocation
       expect(wrapFnSpy).toHaveBeenCalledTimes(1);
     });
 
@@ -46,11 +49,11 @@ describe('wrapFunction', () => {
       let wrapCount = 0;
       let callCount = 0;
 
-      const wrapFn: WrapFn = (_context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         wrapCount++;
-        return (method, invCtx) => {
+        return (...args) => {
           callCount++;
-          return method(...invCtx.args);
+          return method(...args);
         };
       };
 
@@ -66,8 +69,8 @@ describe('wrapFunction', () => {
         descriptor,
       });
 
-      // wrapFn called at wrap time
-      expect(wrapCount).toBe(1);
+      // wrapFn NOT called at wrap time
+      expect(wrapCount).toBe(0);
       expect(callCount).toBe(0);
 
       const instance = { constructor: { name: 'TestService' } };
@@ -88,9 +91,9 @@ describe('wrapFunction', () => {
     it('should reuse the factory result for different instances', () => {
       let wrapCount = 0;
 
-      const wrapFn: WrapFn = (_context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         wrapCount++;
-        return (method, invCtx) => method(...invCtx.args);
+        return (...args) => method(...args);
       };
 
       function doWork() {
@@ -105,8 +108,8 @@ describe('wrapFunction', () => {
         descriptor,
       });
 
-      // wrapFn called once at wrap time
-      expect(wrapCount).toBe(1);
+      // wrapFn NOT called at wrap time
+      expect(wrapCount).toBe(0);
 
       const instanceA = { constructor: { name: 'TestService' } };
       const instanceB = { constructor: { name: 'TestService' } };
@@ -123,9 +126,9 @@ describe('wrapFunction', () => {
     });
 
     it('should return the result from the inner function', () => {
-      const wrapFn: WrapFn<number> = (_context) => {
-        return (method, invCtx) => {
-          const result = method(...invCtx.args) as number;
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => {
+          const result = method(...args) as number;
           return result * 2;
         };
       };
@@ -149,8 +152,8 @@ describe('wrapFunction', () => {
 
   describe('this binding', () => {
     it('should bind original method to the correct this context', () => {
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => method(...invCtx.args);
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => method(...args);
       };
 
       const original: (...args: unknown[]) => unknown = function (
@@ -171,14 +174,12 @@ describe('wrapFunction', () => {
       expect(wrapped.call(instance, 'world')).toBe('Hello, world');
     });
 
-    it('should pass a pre-bound method per invocation', () => {
+    it('should pass a method proxy that delegates to current instance', () => {
       let capturedMethod: ((...args: unknown[]) => unknown) | undefined;
 
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => {
-          capturedMethod = method;
-          return method(...invCtx.args);
-        };
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        capturedMethod = method;
+        return (...args) => method(...args);
       };
 
       const original: (...args: unknown[]) => unknown = function (
@@ -197,19 +198,19 @@ describe('wrapFunction', () => {
       const instance = { value: 'instance-data', constructor: { name: 'TestService' } };
       wrapped.call(instance);
 
-      // The captured method should be pre-bound to the instance
+      // The captured method proxy delegates to the current instance
       expect(capturedMethod).toBeDefined();
       expect(capturedMethod!()).toBe('instance-data');
     });
   });
 
-  describe('WrapContext fields (decoration-time)', () => {
-    it('should provide decoration-time context fields', () => {
+  describe('WrapContext fields', () => {
+    it('should provide decoration-time and runtime context fields', () => {
       let capturedContext: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedContext = context;
-        return (method, invCtx) => method(...invCtx.args);
+        return (...args) => method(...args);
       };
 
       function greet(name: string, greeting: string) {
@@ -218,57 +219,33 @@ describe('wrapFunction', () => {
 
       const original = asMethod(greet);
       const descriptor: PropertyDescriptor = { value: original, writable: true };
-      wrapMethod(original, wrapFn, {
+      const wrapped = wrapMethod(original, wrapFn, {
         parameterNames: ['name', 'greeting'],
         propertyKey: 'greet',
         descriptor,
       });
 
-      // WrapContext captured at wrap time
+      // WrapContext NOT captured at wrap time (lazy init)
+      expect(capturedContext).toBeUndefined();
+
+      const instance = { constructor: { name: 'TestService' } };
+      wrapped.call(instance, 'world', 'hi');
+
+      // WrapContext captured on first invocation
       expect(capturedContext).toBeDefined();
       expect(capturedContext!.propertyKey).toBe('greet');
       expect(capturedContext!.parameterNames).toEqual(['name', 'greeting']);
       expect(capturedContext!.descriptor).toBe(descriptor);
+      expect(capturedContext!.target).toBe(instance);
+      expect(capturedContext!.className).toBe('TestService');
     });
 
-    it('should NOT include target, className, args, or argsObject in WrapContext', () => {
-      let capturedContext: WrapContext | undefined;
+    it('should provide target and className in WrapContext', () => {
+      let capturedCtx: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (context) => {
-        capturedContext = context;
-        return (method, invCtx) => method(...invCtx.args);
-      };
-
-      function doWork(x: number) {
-        return x;
-      }
-
-      const original = asMethod(doWork);
-      const descriptor: PropertyDescriptor = { value: original, writable: true };
-      wrapMethod(original, wrapFn, {
-        parameterNames: ['x'],
-        propertyKey: 'doWork',
-        descriptor,
-      });
-
-      // WrapContext captured at wrap time
-      expect(capturedContext).toBeDefined();
-      expect('target' in capturedContext!).toBe(false);
-      expect('className' in capturedContext!).toBe(false);
-      expect('args' in capturedContext!).toBe(false);
-      expect('argsObject' in capturedContext!).toBe(false);
-    });
-  });
-
-  describe('InvocationContext fields (per-call)', () => {
-    it('should provide target and className in InvocationContext', () => {
-      let capturedInvCtx: InvocationContext | undefined;
-
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => {
-          capturedInvCtx = invCtx;
-          return method(...invCtx.args);
-        };
+      const wrapFn: AnyWrapFn = (method, context) => {
+        capturedCtx = context;
+        return (...args) => method(...args);
       };
 
       function doWork() {
@@ -286,49 +263,17 @@ describe('wrapFunction', () => {
       const instance = { constructor: { name: 'MySpecialService' } };
       wrapped.call(instance);
 
-      expect(capturedInvCtx).toBeDefined();
-      expect(capturedInvCtx!.target).toBe(instance);
-      expect(capturedInvCtx!.className).toBe('MySpecialService');
+      expect(capturedCtx).toBeDefined();
+      expect(capturedCtx!.target).toBe(instance);
+      expect(capturedCtx!.className).toBe('MySpecialService');
     });
 
-    it('should provide args and argsObject in InvocationContext', () => {
-      let capturedInvCtx: InvocationContext | undefined;
+    it('should include propertyKey, parameterNames, descriptor in WrapContext', () => {
+      let capturedCtx: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => {
-          capturedInvCtx = invCtx;
-          return method(...invCtx.args);
-        };
-      };
-
-      function greet(name: string, greeting: string) {
-        return `${greeting} ${name}`;
-      }
-
-      const original = asMethod(greet);
-      const descriptor: PropertyDescriptor = { value: original, writable: true };
-      const wrapped = wrapMethod(original, wrapFn, {
-        parameterNames: ['name', 'greeting'],
-        propertyKey: 'greet',
-        descriptor,
-      });
-
-      const instance = { constructor: { name: 'TestService' } };
-      wrapped.call(instance, 'world', 'hi');
-
-      expect(capturedInvCtx).toBeDefined();
-      expect(capturedInvCtx!.args).toEqual(['world', 'hi']);
-      expect(capturedInvCtx!.argsObject).toEqual({ name: 'world', greeting: 'hi' });
-    });
-
-    it('should include WrapContext fields in InvocationContext', () => {
-      let capturedInvCtx: InvocationContext | undefined;
-
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => {
-          capturedInvCtx = invCtx;
-          return method(...invCtx.args);
-        };
+      const wrapFn: AnyWrapFn = (method, context) => {
+        capturedCtx = context;
+        return (...args) => method(...args);
       };
 
       function doWork() {
@@ -346,20 +291,18 @@ describe('wrapFunction', () => {
       const instance = { constructor: { name: 'TestService' } };
       wrapped.call(instance);
 
-      expect(capturedInvCtx).toBeDefined();
-      expect(capturedInvCtx!.propertyKey).toBe('doWork');
-      expect(capturedInvCtx!.parameterNames).toEqual([]);
-      expect(capturedInvCtx!.descriptor).toBe(descriptor);
+      expect(capturedCtx).toBeDefined();
+      expect(capturedCtx!.propertyKey).toBe('doWork');
+      expect(capturedCtx!.parameterNames).toEqual([]);
+      expect(capturedCtx!.descriptor).toBe(descriptor);
     });
 
     it('should return empty string for className when constructor has no name', () => {
-      let capturedInvCtx: InvocationContext | undefined;
+      let capturedCtx: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => {
-          capturedInvCtx = invCtx;
-          return method(...invCtx.args);
-        };
+      const wrapFn: AnyWrapFn = (method, context) => {
+        capturedCtx = context;
+        return (...args) => method(...args);
       };
 
       function doWork() {
@@ -378,49 +321,18 @@ describe('wrapFunction', () => {
       const instance = { constructor: {} };
       wrapped.call(instance as object);
 
-      expect(capturedInvCtx).toBeDefined();
-      expect(capturedInvCtx!.className).toBe('');
-    });
-
-    it('should return undefined argsObject for method with no parameters', () => {
-      let capturedInvCtx: InvocationContext | undefined;
-
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => {
-          capturedInvCtx = invCtx;
-          return method(...invCtx.args);
-        };
-      };
-
-      function doWork() {
-        return 'done';
-      }
-
-      const original = asMethod(doWork);
-      const descriptor: PropertyDescriptor = { value: original, writable: true };
-      const wrapped = wrapMethod(original, wrapFn, {
-        parameterNames: [],
-        propertyKey: 'doWork',
-        descriptor,
-      });
-
-      const instance = { constructor: { name: 'TestService' } };
-      wrapped.call(instance);
-
-      expect(capturedInvCtx).toBeDefined();
-      expect(capturedInvCtx!.argsObject).toBeUndefined();
+      expect(capturedCtx).toBeDefined();
+      expect(capturedCtx!.className).toBe('');
     });
   });
 
   describe('parameter names reuse', () => {
-    it('should reuse the same parameterNames reference across calls', () => {
-      const capturedInvContexts: InvocationContext[] = [];
+    it('should reuse the same WrapContext reference across calls', () => {
+      const capturedContexts: WrapContext[] = [];
 
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => {
-          capturedInvContexts.push(invCtx);
-          return method(...invCtx.args);
-        };
+      const wrapFn: WrapFn = (_method, context) => {
+        capturedContexts.push(context);
+        return (...args) => _method(...args);
       };
 
       function calculate(price: number, tax: number) {
@@ -441,17 +353,16 @@ describe('wrapFunction', () => {
       wrapped.call(instanceA, 100, 10);
       wrapped.call(instanceB, 200, 20);
 
-      expect(capturedInvContexts[0].parameterNames).toEqual(['price', 'tax']);
-      expect(capturedInvContexts[1].parameterNames).toEqual(['price', 'tax']);
-      // Same reference passed each time (from decoration-time context spread)
-      expect(capturedInvContexts[0].parameterNames).toBe(capturedInvContexts[1].parameterNames);
+      // Only one context captured (factory called once)
+      expect(capturedContexts).toHaveLength(1);
+      expect(capturedContexts[0].parameterNames).toEqual(['price', 'tax']);
     });
   });
 
   describe('async methods', () => {
     it('should work with async methods', async () => {
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => method(...invCtx.args);
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => method(...args);
       };
 
       async function fetchData(id: number): Promise<string> {
@@ -473,9 +384,9 @@ describe('wrapFunction', () => {
     });
 
     it('should allow async wrapper to modify async results', async () => {
-      const wrapFn: WrapFn<Promise<string>> = (_context) => {
-        return async (method, invCtx) => {
-          const result = (await method(...invCtx.args)) as string;
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return async (...args) => {
+          const result = (await method(...args)) as string;
           return `modified: ${result}`;
         };
       };
@@ -501,8 +412,8 @@ describe('wrapFunction', () => {
     it('should propagate async errors from the original method', async () => {
       const asyncError = new Error('async failure');
 
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => method(...invCtx.args);
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => method(...args);
       };
 
       async function failingAsync() {
@@ -526,8 +437,8 @@ describe('wrapFunction', () => {
     it('should propagate sync errors from the original method', () => {
       const syncError = new Error('sync failure');
 
-      const wrapFn: WrapFn = (_context) => {
-        return (method, invCtx) => method(...invCtx.args);
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => method(...args);
       };
 
       function failing(): never {
@@ -548,9 +459,9 @@ describe('wrapFunction', () => {
   });
 
   describe('export from barrel', () => {
-    it('should be importable from the main index', async () => {
-      const indexModule = await import('../src/index');
-      expect(typeof indexModule.wrapFunction).toBe('function');
+    it('wrapMethod is internal and not exported from the barrel', async () => {
+      const indexModule = await import('../src/index') as Record<string, unknown>;
+      expect(indexModule['wrapMethod']).toBeUndefined();
     });
 
     it('should export buildArgsObject from the main index', async () => {
