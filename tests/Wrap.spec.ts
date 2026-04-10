@@ -5,10 +5,13 @@ import { SetMeta, getMeta } from '../src/set-meta.decorator';
 import { WRAP_KEY } from '../src/wrap-on-method';
 import type { WrapFn, WrapContext } from '../src/hook.types';
 
+/** Permissive WrapFn alias for runtime-focused tests where type inference is not under test. */
+type AnyWrapFn = WrapFn<object, any[], any>;
+
 describe('Wrap', () => {
   describe('applied to a method', () => {
     it('should delegate to WrapOnMethod and wrap the method', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -26,7 +29,7 @@ describe('Wrap', () => {
     });
 
     it('should set WRAP_APPLIED_KEY on the method descriptor', () => {
-      const wrapFn: WrapFn = (method, _context) => (...args) => method(...args);
+      const wrapFn: AnyWrapFn = (method, _context) => (...args) => method(...args);
 
       class TestService {
         @Wrap(wrapFn)
@@ -47,7 +50,7 @@ describe('Wrap', () => {
     it('should delegate to WrapOnClass and wrap all prototype methods', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -76,14 +79,14 @@ describe('Wrap', () => {
       const classCalls: string[] = [];
       const methodCalls: string[] = [];
 
-      const classWrapFn: WrapFn = (_method, context) => {
+      const classWrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           classCalls.push(String(context.propertyKey));
           return _method(...args);
         };
       };
 
-      const methodWrapFn: WrapFn = (_method, context) => {
+      const methodWrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           methodCalls.push(String(context.propertyKey));
           return _method(...args);
@@ -111,7 +114,7 @@ describe('Wrap', () => {
     });
 
     it('should return the constructor when applied to a class', () => {
-      const wrapFn: WrapFn = (method, _context) => (...args) => method(...args);
+      const wrapFn: AnyWrapFn = (method, _context) => (...args) => method(...args);
 
       @Wrap(wrapFn)
       class TestService {
@@ -128,7 +131,7 @@ describe('Wrap', () => {
     it('should not wrap getters or setters', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -164,7 +167,7 @@ describe('Wrap', () => {
     });
 
     it('should not wrap the constructor', () => {
-      const wrapFnSpy = vi.fn<WrapFn>((method, _context) => {
+      const wrapFnSpy = vi.fn<AnyWrapFn>((method, _context) => {
         return (...args) => method(...args);
       });
 
@@ -197,7 +200,7 @@ describe('Wrap', () => {
     it('should pass WrapContext with all fields on first call', () => {
       let receivedContext: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         receivedContext = context;
         return (...args) => method(...args);
       };
@@ -227,7 +230,7 @@ describe('Wrap', () => {
     it('should provide target and className in WrapContext', () => {
       let receivedCtx: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         receivedCtx = context;
         return (...args) => method(...args);
       };
@@ -251,7 +254,7 @@ describe('Wrap', () => {
     it('should pass a this-bound method proxy', () => {
       let receivedMethod: ((...args: unknown[]) => unknown) | undefined;
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         receivedMethod = method;
         return (...args) => method(...args);
       };
@@ -277,7 +280,7 @@ describe('Wrap', () => {
     });
 
     it('should bind method to the correct instance for each invocation', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -300,7 +303,7 @@ describe('Wrap', () => {
 
   describe('sync method through Wrap', () => {
     it('should wrap a sync method and return its result unchanged', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -316,7 +319,7 @@ describe('Wrap', () => {
     });
 
     it('should allow Wrap to modify the sync return value', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => {
           const result = method(...args) as number;
           return result * 10;
@@ -335,7 +338,7 @@ describe('Wrap', () => {
     });
 
     it('should allow Wrap to intercept arguments for sync methods', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => {
           // Intercept: double all numeric arguments
           const doubled = args.map((a) =>
@@ -360,7 +363,7 @@ describe('Wrap', () => {
 
   describe('async method through Wrap', () => {
     it('should wrap an async method and return its resolved value', async () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return async (...args) => {
           const result = await method(...args);
           return result;
@@ -381,7 +384,7 @@ describe('Wrap', () => {
     });
 
     it('should allow Wrap to modify the async return value', async () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return async (...args) => {
           const result = (await method(...args)) as { id: number; name: string };
           return { ...result, modified: true };
@@ -402,7 +405,7 @@ describe('Wrap', () => {
     });
 
     it('should propagate errors from async methods', async () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return async (...args) => {
           return method(...args);
         };
@@ -427,14 +430,14 @@ describe('Wrap', () => {
       const CUSTOM_KEY = Symbol('custom');
 
       const calls: string[] = [];
-      const wrapFnA: WrapFn = (_method, context) => {
+      const wrapFnA: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(`A:${String(context.propertyKey)}`);
           return _method(...args);
         };
       };
 
-      const wrapFnB: WrapFn = (_method, context) => {
+      const wrapFnB: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(`B:${String(context.propertyKey)}`);
           return _method(...args);
@@ -462,14 +465,14 @@ describe('Wrap', () => {
       const classCalls: string[] = [];
       const methodCalls: string[] = [];
 
-      const classWrapFn: WrapFn = (_method, context) => {
+      const classWrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           classCalls.push(String(context.propertyKey));
           return _method(...args);
         };
       };
 
-      const methodWrapFn: WrapFn = (_method, context) => {
+      const methodWrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           methodCalls.push(String(context.propertyKey));
           return _method(...args);
@@ -502,7 +505,7 @@ describe('Wrap', () => {
       const EXCLUSION_KEY = Symbol('noWrap');
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -531,7 +534,7 @@ describe('Wrap', () => {
 
     it('should mark method with exclusionKey when applied at method level', () => {
       const EXCLUSION_KEY = Symbol('customKey');
-      const wrapFn: WrapFn = (method, _context) => (...args) => method(...args);
+      const wrapFn: AnyWrapFn = (method, _context) => (...args) => method(...args);
 
       class TestService {
         @Wrap(wrapFn, EXCLUSION_KEY)
@@ -551,9 +554,109 @@ describe('Wrap', () => {
     });
   });
 
+  describe('inner function receives exact call-site arguments', () => {
+    it('should pass the same args array to the inner function', () => {
+      let capturedArgs: unknown[] | undefined;
+
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => {
+          capturedArgs = args;
+          return method(...args);
+        };
+      };
+
+      class Calculator {
+        @Wrap(wrapFn)
+        add(a: number, b: number) {
+          return a + b;
+        }
+      }
+
+      const calc = new Calculator();
+      calc.add(2, 3);
+
+      expect(capturedArgs).toEqual([2, 3]);
+    });
+
+    it('should match call-site arguments with mixed types', () => {
+      let capturedArgs: unknown[] | undefined;
+
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => {
+          capturedArgs = args;
+          return method(...args);
+        };
+      };
+
+      class Service {
+        @Wrap(wrapFn)
+        process(name: string, count: number, config: { verbose: boolean }) {
+          return { name, count, config };
+        }
+      }
+
+      const service = new Service();
+      const config = { verbose: true };
+      service.process('test', 42, config);
+
+      expect(capturedArgs).toBeDefined();
+      expect(capturedArgs).toHaveLength(3);
+      expect(capturedArgs![0]).toBe('test');
+      expect(capturedArgs![1]).toBe(42);
+      expect(capturedArgs![2]).toBe(config);
+    });
+
+    it('should receive empty args array when called with no arguments', () => {
+      let capturedArgs: unknown[] | undefined;
+
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => {
+          capturedArgs = args;
+          return method(...args);
+        };
+      };
+
+      class Service {
+        @Wrap(wrapFn)
+        noArgs() {
+          return 'done';
+        }
+      }
+
+      const service = new Service();
+      service.noArgs();
+
+      expect(capturedArgs).toEqual([]);
+    });
+
+    it('should receive updated args on each invocation', () => {
+      const allCaptures: unknown[][] = [];
+
+      const wrapFn: AnyWrapFn = (method, _context) => {
+        return (...args) => {
+          allCaptures.push([...args]);
+          return method(...args);
+        };
+      };
+
+      class Service {
+        @Wrap(wrapFn)
+        greet(name: string) {
+          return `hello ${name}`;
+        }
+      }
+
+      const service = new Service();
+      service.greet('alice');
+      service.greet('bob');
+
+      expect(allCaptures).toEqual([['alice'], ['bob']]);
+    });
+  });
+
   describe('invalid decorator context', () => {
     it('should throw Error when applied in an unsupported context', () => {
-      const wrapFn: WrapFn = (method, _context) => (...args) => method(...args);
+      const wrapFn: AnyWrapFn = (method, _context) => (...args) => method(...args);
 
       const decorator = Wrap(wrapFn);
 
@@ -564,7 +667,7 @@ describe('Wrap', () => {
     });
 
     it('should throw Error with propertyKey present but descriptor missing', () => {
-      const wrapFn: WrapFn = (method, _context) => (...args) => method(...args);
+      const wrapFn: AnyWrapFn = (method, _context) => (...args) => method(...args);
 
       const decorator = Wrap(wrapFn);
 

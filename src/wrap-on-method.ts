@@ -1,6 +1,6 @@
 import { setMeta, SYM_META_PROP } from './set-meta.decorator';
 import { getParameterNames } from './getParameterNames';
-import type { WrapFn, WrapContext } from './hook.types';
+import type { WrapFn, WrapContext, TypedMethodDecorator } from './hook.types';
 
 /**
  * Symbol sentinel set on every function wrapped by {@link WrapOnMethod}.
@@ -21,7 +21,9 @@ export const WRAP_KEY: unique symbol = Symbol('wrap');
  * descriptor via `setMeta`, and any existing `_symMeta` metadata from
  * the original function is copied to the wrapper.
  *
- * @typeParam R - The return type of the decorated method
+ * @typeParam T      - The class instance type. Defaults to `object`.
+ * @typeParam TArgs  - Tuple of method parameter types. Defaults to `unknown[]`.
+ * @typeParam TReturn - The method return type. Defaults to `unknown`.
  * @param wrapFn       - Factory called once on first invocation with the
  *                        `this`-bound original method and a
  *                        {@link WrapContext}. Returns the inner function
@@ -45,16 +47,19 @@ export const WRAP_KEY: unique symbol = Symbol('wrap');
  * }
  * ```
  */
-export const WrapOnMethod = <R = unknown>(
-  wrapFn: WrapFn<R>,
+export const WrapOnMethod = <
+  T extends object = object,
+  TArgs extends unknown[] = unknown[],
+  TReturn = unknown,
+>(
+  wrapFn: WrapFn<T, TArgs, TReturn>,
   exclusionKey: symbol = WRAP_KEY,
-): MethodDecorator => {
-  return (
-    _target: object,
-    propertyKey: string | symbol,
-    descriptor: PropertyDescriptor,
-  ): PropertyDescriptor => {
-    const originalMethod = descriptor.value as (...args: unknown[]) => unknown;
+): TypedMethodDecorator<TArgs, TReturn> => {
+  return (_target,propertyKey,descriptor) => {
+    const originalMethod = descriptor.value;
+    if (!originalMethod) {
+      throw new Error('Method decorator can only be applied to methods');
+    }
 
     // Extract parameter names at decoration time (once, not per-call)
     const parameterNames = getParameterNames(originalMethod);
@@ -119,7 +124,9 @@ const getClassName = (instance: object): string => {
  * is mutable -- `target` and `className` update before each call so the
  * factory's closure always sees current values.
  *
- * @typeParam R - The return type produced by the wrapper
+ * @typeParam T      - The class instance type. Defaults to `object`.
+ * @typeParam TArgs  - Tuple of method parameter types. Defaults to `unknown[]`.
+ * @typeParam TReturn - The method return type. Defaults to `unknown`.
  * @param originalMethod - The function to wrap
  * @param wrapFn         - Factory called once on first invocation with a
  *                          method proxy and {@link WrapContext}. Returns the
@@ -140,23 +147,27 @@ const getClassName = (instance: object): string => {
  * const result = wrapped.call(instance, 1, 2);
  * ```
  */
-export const wrapMethod = <R = unknown>(
-  originalMethod: (...args: unknown[]) => unknown,
-  wrapFn: WrapFn<R>,
+export const wrapMethod = <
+  T extends object = object,
+  TArgs extends unknown[] = unknown[],
+  TReturn = unknown,
+>(
+  originalMethod: (...args: TArgs) => TReturn,
+  wrapFn: WrapFn<T, TArgs, TReturn>,
   options: WrapMethodOptions,
-): ((this: object, ...args: unknown[]) => unknown) => {
+): ((this: T, ...args: TArgs) => TReturn) => {
   const { parameterNames, propertyKey, descriptor } = options;
 
-  let invocationFn: ((...args: unknown[]) => R) | null = null;
+  let invocationFn: ((...args: TArgs) => TReturn) | null = null;
   let currentInstance: object;
 
   /** Method proxy that always delegates to current this. */
-  const methodProxy = function (...args: unknown[]) {
+  const methodProxy = function (...args: TArgs) {
     return originalMethod.apply(currentInstance, args);
   };
 
   /** Mutable context -- target/className updated on each call. */
-  const wrapContext: WrapContext = {
+  const wrapContext: WrapContext<T> = {
     propertyKey,
     parameterNames,
     descriptor,
@@ -164,7 +175,7 @@ export const wrapMethod = <R = unknown>(
     className: '',
   };
 
-  return function (this: object, ...args: unknown[]): unknown {
+  return function (this: T, ...args: TArgs): TReturn {
     currentInstance = this;
     wrapContext.target = this;
     wrapContext.className = getClassName(this);

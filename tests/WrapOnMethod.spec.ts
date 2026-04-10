@@ -4,6 +4,9 @@ import { WrapOnMethod, WRAP_KEY } from '../src/wrap-on-method';
 import { getMeta, SetMeta } from '../src/set-meta.decorator';
 import type { WrapFn, WrapContext } from '../src/hook.types';
 
+/** Permissive WrapFn alias for runtime-focused tests where type inference is not under test. */
+type AnyWrapFn = WrapFn<object, any[], any>;
+
 describe('WrapOnMethod', () => {
   describe('WRAP_KEY', () => {
     it('should be a unique symbol', () => {
@@ -14,7 +17,7 @@ describe('WrapOnMethod', () => {
 
   describe('basic wrapping', () => {
     it('should call wrapFn once on first invocation, not at decoration time', () => {
-      const wrapFnSpy = vi.fn<WrapFn>((method, _context) => {
+      const wrapFnSpy = vi.fn<AnyWrapFn>((method, _context) => {
         return (...args) => method(...args);
       });
 
@@ -40,7 +43,7 @@ describe('WrapOnMethod', () => {
       let wrapCount = 0;
       let callCount = 0;
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         wrapCount++;
         return (...args) => {
           callCount++;
@@ -76,7 +79,7 @@ describe('WrapOnMethod', () => {
     it('should reuse the same factory function across instances', () => {
       let wrapCount = 0;
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         wrapCount++;
         return (...args) => method(...args);
       };
@@ -106,7 +109,7 @@ describe('WrapOnMethod', () => {
     });
 
     it('should return the result from innerFn', () => {
-      const wrapFn: WrapFn<number> = (method, _context) => {
+      const wrapFn: WrapFn<object, any[], number> = (method, _context) => {
         return (...args) => {
           const result = method(...args) as number;
           return result * 2;
@@ -127,7 +130,7 @@ describe('WrapOnMethod', () => {
 
   describe('this binding', () => {
     it('should bind original method to the correct this context', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -147,7 +150,7 @@ describe('WrapOnMethod', () => {
     it('should pass a method proxy that delegates to current this', () => {
       let capturedMethod: ((...args: unknown[]) => unknown) | undefined;
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         capturedMethod = method;
         return (...args) => method(...args);
       };
@@ -174,7 +177,7 @@ describe('WrapOnMethod', () => {
     it('should provide target and className in WrapContext on first call', () => {
       let capturedCtx: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedCtx = context;
         return (...args) => method(...args);
       };
@@ -197,7 +200,7 @@ describe('WrapOnMethod', () => {
     it('should provide all decoration-time context fields', () => {
       let capturedContext: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedContext = context;
         return (...args) => method(...args);
       };
@@ -223,7 +226,7 @@ describe('WrapOnMethod', () => {
     it('should update target and className on each call (mutable context)', () => {
       let capturedContext: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedContext = context;
         return (...args) => method(...args);
       };
@@ -253,7 +256,7 @@ describe('WrapOnMethod', () => {
     it('should extract parameter names at decoration time', () => {
       let capturedContext: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedContext = context;
         return (...args) => method(...args);
       };
@@ -274,7 +277,7 @@ describe('WrapOnMethod', () => {
     it('should reuse the same WrapContext reference since wrapFn is called once', () => {
       let capturedContext: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedContext = context;
         return (...args) => method(...args);
       };
@@ -302,7 +305,7 @@ describe('WrapOnMethod', () => {
     it('should return empty array for a method with no parameters', () => {
       let capturedContext: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedContext = context;
         return (...args) => method(...args);
       };
@@ -324,7 +327,7 @@ describe('WrapOnMethod', () => {
 
   describe('exclusion key', () => {
     it('should set WRAP_KEY as default exclusion key', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -346,7 +349,7 @@ describe('WrapOnMethod', () => {
     it('should use custom exclusion key when provided', () => {
       const CUSTOM_KEY = Symbol('custom');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -368,7 +371,7 @@ describe('WrapOnMethod', () => {
     it('should NOT set default WRAP_KEY when custom key is provided', () => {
       const CUSTOM_KEY = Symbol('custom');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -394,7 +397,7 @@ describe('WrapOnMethod', () => {
     it('should preserve SetMeta metadata after wrapping', () => {
       const META_KEY = Symbol('testMeta');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -418,7 +421,7 @@ describe('WrapOnMethod', () => {
       const KEY_A = Symbol('a');
       const KEY_B = Symbol('b');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -443,7 +446,7 @@ describe('WrapOnMethod', () => {
 
   describe('sync method wrapping', () => {
     it('should pass through the return value unchanged when wrapper delegates', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -461,7 +464,7 @@ describe('WrapOnMethod', () => {
     it('should propagate sync errors from the original method', () => {
       const syncError = new Error('sync failure');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -479,7 +482,7 @@ describe('WrapOnMethod', () => {
 
   describe('async methods', () => {
     it('should work with async methods', async () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -497,7 +500,7 @@ describe('WrapOnMethod', () => {
     });
 
     it('should allow async wrapper to modify async results', async () => {
-      const wrapFn: WrapFn<Promise<string>> = (method, _context) => {
+      const wrapFn: WrapFn<object, any[], Promise<string>> = (method, _context) => {
         return async (...args) => {
           const result = (await method(...args)) as string;
           return `modified: ${result}`;
@@ -520,7 +523,7 @@ describe('WrapOnMethod', () => {
     it('should propagate async errors (rejected promises) from the original method', async () => {
       const asyncError = new Error('async failure');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -538,7 +541,7 @@ describe('WrapOnMethod', () => {
 
   describe('method decorator return type', () => {
     it('should return a valid MethodDecorator', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -547,7 +550,7 @@ describe('WrapOnMethod', () => {
     });
 
     it('should replace descriptor.value with the wrapped function', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 

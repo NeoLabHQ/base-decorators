@@ -130,6 +130,8 @@ const Log = () => Wrap((method, context: WrapContext) => {
 });
 ```
 
+> **Auto-bound method:** The `method` parameter is automatically bound to the current `this` instance on every call. You never need to use `.bind()`, `.call()`, or `.apply()` -- just invoke `method(...args)` directly and it will execute with the correct `this` context.
+
 **`Effect`**: Instead of writing the full wrapping logic yourself, you provide lifecycle hooks and Effect handles the execution flow:
 
 ```typescript

@@ -5,12 +5,15 @@ import { WrapOnMethod, WRAP_KEY } from '../src/wrap-on-method';
 import { SetMeta, getMeta } from '../src/set-meta.decorator';
 import type { WrapFn, WrapContext } from '../src/hook.types';
 
+/** Permissive WrapFn alias for runtime-focused tests where type inference is not under test. */
+type AnyWrapFn = WrapFn<object, any[], any>;
+
 describe('WrapOnClass', () => {
   describe('wraps all regular prototype methods', () => {
     it('should wrap every eligible method with the provided WrapFn', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -41,7 +44,7 @@ describe('WrapOnClass', () => {
     });
 
     it('should preserve correct return values from wrapped methods', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -64,7 +67,7 @@ describe('WrapOnClass', () => {
 
   describe('skips constructor', () => {
     it('should not fire the wrapper during construction', () => {
-      const wrapFnSpy = vi.fn<WrapFn>((method, _context) => {
+      const wrapFnSpy = vi.fn<AnyWrapFn>((method, _context) => {
         return (...args) => method(...args);
       });
 
@@ -95,7 +98,7 @@ describe('WrapOnClass', () => {
     it('should not include constructor in the set of wrapped property names', () => {
       const wrappedNames: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         wrappedNames.push(String(context.propertyKey));
         return (...args) => _method(...args);
       };
@@ -132,7 +135,7 @@ describe('WrapOnClass', () => {
     it('should not wrap getter or setter accessors', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -168,7 +171,7 @@ describe('WrapOnClass', () => {
     it('should skip getter-only properties', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -197,7 +200,7 @@ describe('WrapOnClass', () => {
       const calls: string[] = [];
       let stored = 0;
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -228,7 +231,7 @@ describe('WrapOnClass', () => {
     it('should not attempt to wrap non-function prototype properties', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -259,7 +262,7 @@ describe('WrapOnClass', () => {
     it('should skip string and object prototype values', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -297,7 +300,7 @@ describe('WrapOnClass', () => {
     it('should skip methods explicitly excluded via SetMeta with default key', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -328,7 +331,7 @@ describe('WrapOnClass', () => {
       const CUSTOM_KEY = Symbol('custom');
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -361,14 +364,14 @@ describe('WrapOnClass', () => {
       const classCalls: string[] = [];
       const methodCalls: string[] = [];
 
-      const classWrapFn: WrapFn = (_method, context) => {
+      const classWrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           classCalls.push(String(context.propertyKey));
           return _method(...args);
         };
       };
 
-      const methodWrapFn: WrapFn = (_method, context) => {
+      const methodWrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           methodCalls.push(String(context.propertyKey));
           return _method(...args);
@@ -401,14 +404,14 @@ describe('WrapOnClass', () => {
       const classCalls: string[] = [];
       const methodCalls: string[] = [];
 
-      const classWrapFn: WrapFn = (_method, context) => {
+      const classWrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           classCalls.push(String(context.propertyKey));
           return _method(...args);
         };
       };
 
-      const methodWrapFn: WrapFn = (_method, context) => {
+      const methodWrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           methodCalls.push(String(context.propertyKey));
           return _method(...args);
@@ -441,7 +444,7 @@ describe('WrapOnClass', () => {
     it('should default to WRAP_APPLIED_KEY when no exclusionKey is provided', () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);
@@ -469,7 +472,7 @@ describe('WrapOnClass', () => {
     });
 
     it('should set WRAP_APPLIED_KEY metadata on methods it wraps', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -492,7 +495,7 @@ describe('WrapOnClass', () => {
     it('should set custom exclusion key metadata on wrapped methods', () => {
       const CUSTOM_KEY = Symbol('custom');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -515,7 +518,7 @@ describe('WrapOnClass', () => {
     it('should not set WRAP_APPLIED_KEY when a custom key is provided', () => {
       const CUSTOM_KEY = Symbol('custom');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -543,14 +546,14 @@ describe('WrapOnClass', () => {
       const callsA: string[] = [];
       const callsB: string[] = [];
 
-      const wrapFnA: WrapFn = (_method, context) => {
+      const wrapFnA: AnyWrapFn = (_method, context) => {
         return (...args) => {
           callsA.push(String(context.propertyKey));
           return _method(...args);
         };
       };
 
-      const wrapFnB: WrapFn = (_method, context) => {
+      const wrapFnB: AnyWrapFn = (_method, context) => {
         return (...args) => {
           callsB.push(String(context.propertyKey));
           return _method(...args);
@@ -577,7 +580,7 @@ describe('WrapOnClass', () => {
 
   describe('this binding is preserved', () => {
     it('should preserve this context in wrapped methods', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -599,7 +602,7 @@ describe('WrapOnClass', () => {
     it('should pass decoration-time and runtime fields in WrapContext', () => {
       const capturedContexts: WrapContext[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         capturedContexts.push(context);
         return (...args) => _method(...args);
       };
@@ -634,7 +637,7 @@ describe('WrapOnClass', () => {
     it('should wrap async methods correctly', async () => {
       const calls: string[] = [];
 
-      const wrapFn: WrapFn = (_method, context) => {
+      const wrapFn: AnyWrapFn = (_method, context) => {
         return (...args) => {
           calls.push(String(context.propertyKey));
           return _method(...args);

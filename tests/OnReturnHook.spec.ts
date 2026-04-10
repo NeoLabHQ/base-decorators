@@ -1,19 +1,23 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { OnReturnHook } from '../src/on-return.hook';
-import type { OnReturnContext } from '../src/hook.types';
+import type { OnReturnContext, OnReturnHookType } from '../src/hook.types';
+
+/** Permissive OnReturnHook wrapper for runtime-focused tests where type inference is not under test. */
+const AnyOnReturnHook = (callback: OnReturnHookType<object, any[], any>, exclusionKey?: symbol) =>
+  OnReturnHook<object, any[], any>(callback, exclusionKey);
 
 describe('OnReturnHook', () => {
   describe('applied to a method', () => {
     it('should fire callback after sync method returns successfully', () => {
       const callOrder: string[] = [];
-      const callback = vi.fn((ctx: OnReturnContext<string>) => {
+      const callback = vi.fn((ctx: OnReturnContext) => {
         callOrder.push('onReturn');
         return ctx.result;
       });
 
       class TestService {
-        @OnReturnHook(callback)
+        @AnyOnReturnHook(callback)
         greet(name: string) {
           callOrder.push('original');
           return `hello ${name}`;
@@ -36,7 +40,7 @@ describe('OnReturnHook', () => {
       });
 
       class TestService {
-        @OnReturnHook(callback)
+        @AnyOnReturnHook(callback)
         async fetchData(id: number) {
           callOrder.push('original');
           return { id };
@@ -52,10 +56,10 @@ describe('OnReturnHook', () => {
     });
 
     it('should allow callback to transform the return value', () => {
-      const callback = vi.fn((ctx: OnReturnContext<string>) => `${ctx.result}-transformed`);
+      const callback = vi.fn((ctx: OnReturnContext) => `${ctx.result}-transformed`);
 
       class TestService {
-        @OnReturnHook(callback)
+        @AnyOnReturnHook(callback)
         greet(name: string) {
           return `hello ${name}`;
         }
@@ -72,7 +76,7 @@ describe('OnReturnHook', () => {
       const testError = new Error('failure');
 
       class TestService {
-        @OnReturnHook(callback)
+        @AnyOnReturnHook(callback)
         failing() {
           throw testError;
         }
@@ -84,10 +88,10 @@ describe('OnReturnHook', () => {
     });
 
     it('should pass args, target, propertyKey, result, and descriptor to callback', () => {
-      const callback = vi.fn((ctx: OnReturnContext<number>) => ctx.result);
+      const callback = vi.fn((ctx: OnReturnContext) => ctx.result);
 
       class TestService {
-        @OnReturnHook(callback)
+        @AnyOnReturnHook(callback)
         add(a: number, b: number) {
           return a + b;
         }
@@ -112,7 +116,7 @@ describe('OnReturnHook', () => {
     it('should fire callback after each method returns', () => {
       const callback = vi.fn((ctx: OnReturnContext) => ctx.result);
 
-      @OnReturnHook(callback)
+      @AnyOnReturnHook(callback)
       class TestService {
         methodA() {
           return 'a';

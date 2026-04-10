@@ -3,6 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { wrapMethod } from '../src/wrap-on-method';
 import type { WrapFn, WrapContext } from '../src/hook.types';
 
+/** Permissive WrapFn alias for runtime-focused tests where type inference is not under test. */
+type AnyWrapFn = WrapFn<object, any[], any>;
+
 /**
  * Helper that simulates how {@link WrapOnMethod} extracts the original
  * method from a descriptor. The cast mirrors `descriptor.value as (...args: unknown[]) => unknown`
@@ -14,7 +17,7 @@ const asMethod = (fn: Function): ((...args: unknown[]) => unknown) =>
 describe('wrapFunction', () => {
   describe('basic wrapping', () => {
     it('should call wrapFn once on first invocation, not at wrap time', () => {
-      const wrapFnSpy = vi.fn<WrapFn>((method, _context) => {
+      const wrapFnSpy = vi.fn<AnyWrapFn>((method, _context) => {
         return (...args) => method(...args);
       });
 
@@ -46,7 +49,7 @@ describe('wrapFunction', () => {
       let wrapCount = 0;
       let callCount = 0;
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         wrapCount++;
         return (...args) => {
           callCount++;
@@ -88,7 +91,7 @@ describe('wrapFunction', () => {
     it('should reuse the factory result for different instances', () => {
       let wrapCount = 0;
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         wrapCount++;
         return (...args) => method(...args);
       };
@@ -123,7 +126,7 @@ describe('wrapFunction', () => {
     });
 
     it('should return the result from the inner function', () => {
-      const wrapFn: WrapFn<number> = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => {
           const result = method(...args) as number;
           return result * 2;
@@ -149,7 +152,7 @@ describe('wrapFunction', () => {
 
   describe('this binding', () => {
     it('should bind original method to the correct this context', () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -174,7 +177,7 @@ describe('wrapFunction', () => {
     it('should pass a method proxy that delegates to current instance', () => {
       let capturedMethod: ((...args: unknown[]) => unknown) | undefined;
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         capturedMethod = method;
         return (...args) => method(...args);
       };
@@ -205,7 +208,7 @@ describe('wrapFunction', () => {
     it('should provide decoration-time and runtime context fields', () => {
       let capturedContext: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedContext = context;
         return (...args) => method(...args);
       };
@@ -240,7 +243,7 @@ describe('wrapFunction', () => {
     it('should provide target and className in WrapContext', () => {
       let capturedCtx: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedCtx = context;
         return (...args) => method(...args);
       };
@@ -268,7 +271,7 @@ describe('wrapFunction', () => {
     it('should include propertyKey, parameterNames, descriptor in WrapContext', () => {
       let capturedCtx: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedCtx = context;
         return (...args) => method(...args);
       };
@@ -297,7 +300,7 @@ describe('wrapFunction', () => {
     it('should return empty string for className when constructor has no name', () => {
       let capturedCtx: WrapContext | undefined;
 
-      const wrapFn: WrapFn = (method, context) => {
+      const wrapFn: AnyWrapFn = (method, context) => {
         capturedCtx = context;
         return (...args) => method(...args);
       };
@@ -358,7 +361,7 @@ describe('wrapFunction', () => {
 
   describe('async methods', () => {
     it('should work with async methods', async () => {
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -381,7 +384,7 @@ describe('wrapFunction', () => {
     });
 
     it('should allow async wrapper to modify async results', async () => {
-      const wrapFn: WrapFn<Promise<string>> = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return async (...args) => {
           const result = (await method(...args)) as string;
           return `modified: ${result}`;
@@ -409,7 +412,7 @@ describe('wrapFunction', () => {
     it('should propagate async errors from the original method', async () => {
       const asyncError = new Error('async failure');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -434,7 +437,7 @@ describe('wrapFunction', () => {
     it('should propagate sync errors from the original method', () => {
       const syncError = new Error('sync failure');
 
-      const wrapFn: WrapFn = (method, _context) => {
+      const wrapFn: AnyWrapFn = (method, _context) => {
         return (...args) => method(...args);
       };
 
@@ -456,9 +459,9 @@ describe('wrapFunction', () => {
   });
 
   describe('export from barrel', () => {
-    it('should be importable from the main index', async () => {
-      const indexModule = await import('../src/index');
-      expect(typeof indexModule.wrapFunction).toBe('function');
+    it('wrapMethod is internal and not exported from the barrel', async () => {
+      const indexModule = await import('../src/index') as Record<string, unknown>;
+      expect(indexModule['wrapMethod']).toBeUndefined();
     });
 
     it('should export buildArgsObject from the main index', async () => {
