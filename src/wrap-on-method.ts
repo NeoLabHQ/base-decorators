@@ -1,6 +1,6 @@
 import { setMeta, SYM_META_PROP } from './set-meta.decorator';
 import { getParameterNames } from './getParameterNames';
-import type { WrapFn, WrapContext, InvocationContext } from './hook.types';
+import type { WrapFn, WrapContext } from './hook.types';
 
 /**
  * Symbol sentinel set on every function wrapped by {@link WrapOnMethod}.
@@ -22,10 +22,10 @@ export const WRAP_KEY: unique symbol = Symbol('wrap');
  * the original function is copied to the wrapper.
  *
  * @typeParam R - The return type of the decorated method
- * @param wrapFn       - Factory called once at decoration time with a
- *                        {@link WrapContext}. Returns the inner function that
- *                        receives the `this`-bound original method and an
- *                        {@link InvocationContext} on each call.
+ * @param wrapFn       - Factory called once on first invocation with the
+ *                        `this`-bound original method and a
+ *                        {@link WrapContext}. Returns the inner function
+ *                        that receives raw args on each call.
  * @param exclusionKey - Optional symbol used to mark the wrapped method. When
  *                        provided, this key is set instead of the default
  *                        {@link WRAP_KEY}. This allows different
@@ -37,9 +37,9 @@ export const WRAP_KEY: unique symbol = Symbol('wrap');
  * @example
  * ```ts
  * class Service {
- *   \@WrapOnMethod((ctx) => (method, invCtx) => {
- *     console.log(`${String(ctx.propertyKey)} called with`, invCtx.args);
- *     return method(...invCtx.args);
+ *   \@WrapOnMethod((method, ctx) => (...args) => {
+ *     console.log(`${String(ctx.propertyKey)} called with`, args);
+ *     return method(...args);
  *   })
  *   doWork(input: string) { return input.toUpperCase(); }
  * }
@@ -102,40 +102,6 @@ const getClassName = (instance: object): string => {
 };
 
 /**
- * Builds an object mapping parameter names to their call-time values.
- *
- * Creates a record where keys are parameter names and values are the
- * corresponding argument values passed to the function. Returns
- * `undefined` when both arrays are empty.
- *
- * @param parameterNames - Array of parameter names from the function signature
- * @param args - Array of argument values from the current invocation
- * @returns Object mapping parameter names to values, or undefined when empty
- *
- * @example
- * buildArgsObject(['id', 'name'], [1, 'John'])
- * // Returns: { id: 1, name: 'John' }
- */
-export const buildArgsObject = (
-  parameterNames: string[],
-  args: unknown[],
-): Record<string, unknown> | undefined => {
-  if (args.length === 0 && parameterNames.length === 0) {
-    return undefined;
-  }
-
-  const argsObject: Record<string, unknown> = {};
-
-  parameterNames.forEach((paramName, index) => {
-    if (index < args.length) {
-      argsObject[paramName] = args[index];
-    }
-  });
-
-  return argsObject;
-};
-
-/**
  * Wraps a plain method with a {@link WrapFn} factory, producing a new
  * function that delegates to the factory-returned inner function on
  * every call.
@@ -144,24 +110,29 @@ export const buildArgsObject = (
  * It can be used directly to wrap any function without relying on the
  * decorator syntax.
  *
- * The {@link WrapFn} factory is called **once** (immediately) with the
- * decoration-time {@link WrapContext}. On each invocation, the original
- * method is bound to `this`, an {@link InvocationContext} is built with
- * the current arguments, and both are passed to the inner function.
+ * The {@link WrapFn} factory is called **once on first invocation** with
+ * a method proxy and a {@link WrapContext}. On each subsequent call, the
+ * cached inner function is invoked with raw arguments.
+ *
+ * The method proxy always delegates to the original method bound to the
+ * current `this` context (set before each call). The {@link WrapContext}
+ * is mutable -- `target` and `className` update before each call so the
+ * factory's closure always sees current values.
  *
  * @typeParam R - The return type produced by the wrapper
  * @param originalMethod - The function to wrap
- * @param wrapFn         - Factory called once at wrap time with a
- *                          {@link WrapContext}. Returns the inner function
- *                          that receives the `this`-bound method and an
- *                          {@link InvocationContext} on each call.
+ * @param wrapFn         - Factory called once on first invocation with a
+ *                          method proxy and {@link WrapContext}. Returns the
+ *                          inner function that receives raw args on each call.
  * @param options        - Decoration-time metadata for the method being wrapped
- * @returns A function that, when called, binds the original method, builds
- *          an {@link InvocationContext}, and delegates to the inner function
+ * @returns A function that, when called, delegates to the cached inner function
  *
  * @example
  * ```ts
- * const wrapped = wrapMethod(originalFn, myWrapFn, {
+ * const wrapped = wrapMethod(originalFn, (method, ctx) => (...args) => {
+ *   console.log(`${String(ctx.propertyKey)} called`);
+ *   return method(...args);
+ * }, {
  *   parameterNames: ['a', 'b'],
  *   propertyKey: 'add',
  *   descriptor,
@@ -176,30 +147,33 @@ export const wrapMethod = <R = unknown>(
 ): ((this: object, ...args: unknown[]) => unknown) => {
   const { parameterNames, propertyKey, descriptor } = options;
 
-  const decorationContext: WrapContext = {
+  let invocationFn: ((...args: unknown[]) => R) | null = null;
+  let currentInstance: object;
+
+  /** Method proxy that always delegates to current this. */
+  const methodProxy = function (...args: unknown[]) {
+    return originalMethod.apply(currentInstance, args);
+  };
+
+  /** Mutable context -- target/className updated on each call. */
+  const wrapContext: WrapContext = {
     propertyKey,
     parameterNames,
     descriptor,
+    target: Object.create(null),
+    className: '',
   };
 
-  const factoryFn = wrapFn(decorationContext);
-
   return function (this: object, ...args: unknown[]): unknown {
+    currentInstance = this;
+    wrapContext.target = this;
+    wrapContext.className = getClassName(this);
 
-    const boundMethod = originalMethod.bind(this);
+    if (!invocationFn) {
+      invocationFn = wrapFn(methodProxy, wrapContext);
+    }
 
-    const className = getClassName(this);
-    const argsObject = buildArgsObject(parameterNames, args);
-
-    const invocationContext: InvocationContext = {
-      ...decorationContext,
-      target: this,
-      className,
-      args,
-      argsObject,
-    };
-
-    return factoryFn(boundMethod, invocationContext);
+    return invocationFn(...args);
   };
 };
 

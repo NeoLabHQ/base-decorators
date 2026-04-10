@@ -2,11 +2,12 @@
 export type HookArgs = Record<string, unknown> | undefined;
 
 /**
- * Decoration-time context available to every wrapper factory.
+ * Context available to every wrapper factory.
  *
- * Contains only the fields known at decoration time. Runtime fields
- * (target, className) and per-call argument data are provided
- * separately via {@link InvocationContext} and {@link HookContext}.
+ * Contains decoration-time fields (propertyKey, parameterNames, descriptor)
+ * plus mutable runtime fields (target, className) that update before each
+ * method invocation. The factory receives this context on first call and
+ * retains a reference; target/className always reflect the current caller.
  */
 export interface WrapContext {
   /** The property key of the decorated method. */
@@ -15,46 +16,37 @@ export interface WrapContext {
   parameterNames: string[];
   /** The property descriptor of the decorated method. */
   descriptor: PropertyDescriptor;
-}
-
-/**
- * Per-call context passed to the inner function returned by a {@link WrapFn}.
- *
- * Extends {@link WrapContext} with runtime fields that change on each
- * invocation: the `this` target, the derived class name, and the
- * raw/mapped arguments.
- */
-export interface InvocationContext extends WrapContext {
-  /** The `this` target object (class instance). */
+  /** The `this` target object (class instance). Updated before each call. */
   target: object;
-  /** Runtime class name derived from `this.constructor.name`. */
+  /** Runtime class name derived from `this.constructor.name`. Updated before each call. */
   className: string;
-  /** Raw arguments array passed to the method. */
-  args: unknown[];
-  /** Pre-built args object mapping parameter names to their values. */
-  argsObject: HookArgs;
 }
 
 /**
  * Factory function accepted by the Wrap decorator.
  *
- * Called **once at decoration time** with a {@link WrapContext}. Returns an
- * inner function that is called on every invocation with the `this`-bound
- * original method and an {@link InvocationContext}.
+ * Called **once on first method invocation** with the `this`-bound
+ * original method and a {@link WrapContext}. Returns an inner function
+ * that is called on every invocation with the raw arguments.
  *
  * @typeParam R - The return type produced by the inner function
  */
 export type WrapFn<R = unknown> = (
+  method: (...args: unknown[]) => unknown,
   context: WrapContext,
-) => (method: (...args: unknown[]) => unknown, context: InvocationContext) => R;
+) => (...args: unknown[]) => R;
 
 /**
  * Shared context passed to every lifecycle hook.
  *
- * Equivalent to {@link InvocationContext} which already includes all
- * {@link WrapContext} fields plus per-call runtime data.
+ * Extends {@link WrapContext} with per-call argument data.
  */
-export interface HookContext extends InvocationContext {}
+export interface HookContext extends WrapContext {
+  /** Raw arguments array passed to the method. */
+  args: unknown[];
+  /** Pre-built args object mapping parameter names to their values. */
+  argsObject: HookArgs;
+}
 
 /** Extracts the resolved type from a Promise, or returns the type itself. */
 export type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
@@ -138,7 +130,7 @@ export interface EffectHooks<R = unknown> {
  * Accepts either a static hooks object or a factory function that
  * produces hooks from the decoration-time context.
  *
- * When a factory is provided, it is called **once at decoration time**
+ * When a factory is provided, it is called **once on first invocation**
  * with the {@link WrapContext}. The resolved hooks are reused for
  * every subsequent call.
  *

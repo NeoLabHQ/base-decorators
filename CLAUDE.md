@@ -14,5 +14,6 @@ This project uses **semantic-release** with **Conventional Commits**. Follow the
 
 **Core flow:**
 
-1. `Effect` / `EffectOnMethod` / `EffectOnClass` (src/) — Logger-agnostic decorator primitives. `EffectOnMethod` wraps a single method: extracts parameter names, builds a `HookContext` (args object, target, propertyKey, descriptor, parameterNames, className), and invokes lifecycle hooks. `EffectOnClass` iterates prototype methods and applies `EffectOnMethod` to each. `Effect` dispatches to one or the other based on argument count.
-3. `buildArgsObject` (src/effect-on-method.ts) — Maps parameter names to their call-time values to produce the pre-built `args` object passed in every `HookContext`.
+1. `Wrap` / `WrapOnMethod` / `WrapOnClass` (src/) — Foundational decorator primitives. `WrapOnMethod` wraps a single method with lazy initialization: the factory runs once on first invocation with a method proxy and `WrapContext`. `WrapOnClass` iterates prototype methods and applies `WrapOnMethod` to each. `Wrap` dispatches to one or the other based on argument count.
+2. `Effect` (src/effect.decorator.ts) — Higher-level abstraction built on `Wrap` that provides lifecycle hooks (onInvoke, onReturn, onError, finally). Builds a `HookContext` (args, argsObject, target, propertyKey, descriptor, parameterNames, className) per invocation.
+3. `buildArgsObject` (src/effect.decorator.ts) — Maps parameter names to their call-time values to produce the pre-built `argsObject` passed in every `HookContext`.

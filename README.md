@@ -50,17 +50,17 @@ npm install base-decorators
 
 ### Using Wrap 
 
-`Wrap` is the foundational primitive. You receive a `WrapContext` at decoration time and return a replacement function:
+`Wrap` is the foundational primitive. You receive the original method and a `WrapContext` on first invocation and return a replacement function:
 
 ```typescript
 import { Wrap } from 'base-decorators';
-import type { WrapContext, InvocationContext } from 'base-decorators';
+import type { WrapContext } from 'base-decorators';
 
-const Log = () => Wrap((context: WrapContext) => {
-  // Outer function: called once at decoration time
+const Log = () => Wrap((method, context: WrapContext) => {
+  // Outer function: called once on first invocation
   console.log('decorating', context.propertyKey);
 
-  return (method, {args}) => {
+  return (...args) => {
     // Inner function: called on every invocation
     console.log('called with', args);
 
@@ -77,10 +77,10 @@ class Calculator {
     return a + b;
   }
 }
-// logs: "decorating add"  (at decoration time)
 
 const calc = new Calculator();
 calc.add(2, 3);
+// logs: "decorating add"  (first time)
 // logs: "called with [2, 3]"
 // logs: "returned 5"
 
@@ -114,17 +114,17 @@ calc.add(2, 3);
 
 ## How It Works
 
-**`Wrap`** accepts a factory function that receives a `WrapContext` at decoration time and returns an inner function. The inner function is called on every invocation with the `this`-bound original method and an `InvocationContext`. You control the entire execution flow:
+**`Wrap`** accepts a factory function that receives the original method and a `WrapContext` on first invocation and returns an inner function. The inner function is called on every invocation with the raw arguments. You control the entire execution flow:
 
 ```typescript
 import { Wrap } from 'base-decorators';
-import type { WrapContext, InvocationContext } from 'base-decorators';
+import type { WrapContext } from 'base-decorators';
 
-const Log = () => Wrap((context: WrapContext) => {
-  // Outer: called once at decoration time. WrapContext has propertyKey, parameterNames, descriptor.
-  return (method, { args, className }: InvocationContext) => {
-    // Inner: called on every invocation. InvocationContext extends WrapContext with target, className, args, argsObject.
-    console.log(`${className}.${String(context.propertyKey)} called`);
+const Log = () => Wrap((method, context: WrapContext) => {
+  // Outer: called once on first invocation.
+  return (...args) => {
+    // Inner: called on every invocation with raw arguments.
+    console.log(`${context.className}.${String(context.propertyKey)} called`);
     return method(...args);
   };
 });
@@ -216,10 +216,10 @@ All decorators work naturally with async methods. Return an async inner function
 
 ```typescript
 import { Wrap } from 'base-decorators';
-import type { WrapContext, InvocationContext } from 'base-decorators';
+import type { WrapContext } from 'base-decorators';
 
-const AsyncTimer = () => Wrap((context: WrapContext) => {
-  return async (method, { args }) => {
+const AsyncTimer = () => Wrap((method, context: WrapContext) => {
+  return async (...args) => {
     const start = Date.now();
     const result = await method(...args);
     
@@ -420,38 +420,27 @@ Each hook receives a context object. All hooks are optional. Each hook has a cor
 
 ### WrapContext
 
-Available in the **outer** factory function passed to `Wrap`. Contains only decoration-time fields -- fields that vary per call (target, className, args) are absent here.
+Passed to the **outer** factory function of `Wrap` on first invocation. Contains decoration-time fields plus mutable runtime fields (`target`, `className`) that update before each call.
 
 ```typescript
 interface WrapContext {
   propertyKey: string | symbol;  // method name
   parameterNames: string[];      // extracted parameter names
   descriptor: PropertyDescriptor; // method descriptor
-}
-```
-
-### InvocationContext
-
-Passed to the **inner** function returned by your `Wrap` factory. Extends `WrapContext` with per-call runtime fields, so all decoration-time fields are also available here.
-
-```typescript
-interface InvocationContext extends WrapContext {
-  target: object;                                  // class instance (this)
-  className: string;                               // runtime class name
-  args: unknown[];                                 // raw arguments
-  argsObject: Record<string, unknown> | undefined; // mapped parameter names
-  // Plus all WrapContext fields: propertyKey, parameterNames, descriptor
+  target: object;                // class instance (this), updated per call
+  className: string;             // runtime class name, updated per call
 }
 ```
 
 ### HookContext
 
-Passed to every `Effect` lifecycle hook. Equivalent to `InvocationContext` -- all seven fields are available.
+Passed to every `Effect` lifecycle hook. Extends `WrapContext` with per-call argument data.
 
 ```typescript
-interface HookContext extends InvocationContext {
-  // All fields from WrapContext: propertyKey, parameterNames, descriptor
-  // All fields from InvocationContext: target, className, args, argsObject
+interface HookContext extends WrapContext {
+  args: unknown[];                                 // raw arguments
+  argsObject: Record<string, unknown> | undefined; // mapped parameter names
+  // Plus all WrapContext fields: propertyKey, parameterNames, descriptor, target, className
 }
 ```
 
@@ -502,7 +491,7 @@ class DebugService {
 }
 ```
 
-The factory is called **once at decoration time** with the `WrapContext` containing `propertyKey`, `parameterNames`, and `descriptor`. The resolved hooks are reused for every subsequent call. Each resolved hook still receives the full `HookContext` (including `args`, `argsObject`, `target`, and `className`) on every invocation.
+The factory is called **once on first invocation** with the `WrapContext` containing `propertyKey`, `parameterNames`, `descriptor`, `target`, and `className`. The resolved hooks are reused for every subsequent call. Each resolved hook still receives the full `HookContext` (including `args` and `argsObject`) on every invocation.
 
 ## API Reference
 
@@ -517,10 +506,9 @@ The factory is called **once at decoration time** with the `WrapContext` contain
 | `OnReturnHook` | Decorator | Convenience hook for `onReturn` |
 | `OnErrorHook` | Decorator | Convenience hook for `onError` |
 | `FinallyHook` | Decorator | Convenience hook for `finally` |
-| `WrapContext` | Type | Decoration-time context passed to `Wrap` outer factory (propertyKey, parameterNames, descriptor) |
-| `InvocationContext` | Type | Per-call context extending `WrapContext` with runtime fields (target, className, args, argsObject) |
-| `WrapFn` | Type | Wrapper function signature: `(context: WrapContext) => (method, context: InvocationContext) => R` |
-| `HookContext` | Type | Context passed to `Effect` hooks -- equivalent to `InvocationContext` with all fields |
+| `WrapContext` | Type | Context passed to `Wrap` factory (propertyKey, parameterNames, descriptor, target, className) |
+| `WrapFn` | Type | Wrapper function signature: `(method, context: WrapContext) => (...args) => R` |
+| `HookContext` | Type | Context passed to `Effect` hooks -- extends `WrapContext` with args, argsObject |
 | `EffectHooks` | Type | Lifecycle hooks object for `Effect` (onInvoke, onReturn, onError, finally) |
 
 ## Advanced Example

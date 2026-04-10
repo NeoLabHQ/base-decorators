@@ -3,7 +3,6 @@ import type {
   EffectHooks,
   HookContext,
   HooksOrFactory,
-  InvocationContext,
   UnwrapPromise,
   WrapContext,
 } from './hook.types';
@@ -24,8 +23,8 @@ import type {
  * @typeParam R - The return type expected from lifecycle hooks
  * @param hooks        - Lifecycle callbacks (all optional) or a factory
  *                       function that receives a {@link WrapContext} and
- *                       returns hooks. The factory is called **once at
- *                       decoration time**. The resolved hooks are reused
+ *                       returns hooks. The factory is called **once on
+ *                       first invocation**. The resolved hooks are reused
  *                       for every subsequent call.
  * @param exclusionKey - Optional symbol used to mark the wrapped method. When
  *                       provided, this key is set instead of the default
@@ -55,20 +54,16 @@ export const Effect = <R = unknown>(
   hooks: HooksOrFactory<R>,
   exclusionKey?: symbol,
 ): ClassDecorator & MethodDecorator =>
-  Wrap((wrapContext: WrapContext) => {
-    // Resolve hooks ONCE at decoration time.
-    // When hooks is a factory, it receives decoration-time WrapContext.
+  Wrap((method: (...args: unknown[]) => unknown, wrapContext: WrapContext) => {
     const resolvedHooks = resolveHooks(hooks, wrapContext);
 
-    return (
-      boundMethod: (...args: unknown[]) => unknown,
-      invocationContext: InvocationContext,
-    ): unknown => {
-      const hookContext: HookContext = { ...invocationContext };
+    return (...args: unknown[]): unknown => {
+      const argsObject = buildArgsObject(wrapContext.parameterNames, args);
+      const hookContext: HookContext = { ...wrapContext, args, argsObject };
 
       const executeMethod = attachHooks(
-        boundMethod,
-        invocationContext.args,
+        method,
+        args,
         hookContext,
         resolvedHooks,
       );
@@ -86,6 +81,40 @@ export const Effect = <R = unknown>(
   }, exclusionKey);
 
 /**
+ * Builds an object mapping parameter names to their call-time values.
+ *
+ * Creates a record where keys are parameter names and values are the
+ * corresponding argument values passed to the function. Returns
+ * `undefined` when both arrays are empty.
+ *
+ * @param parameterNames - Array of parameter names from the function signature
+ * @param args - Array of argument values from the current invocation
+ * @returns Object mapping parameter names to values, or undefined when empty
+ *
+ * @example
+ * buildArgsObject(['id', 'name'], [1, 'John'])
+ * // Returns: { id: 1, name: 'John' }
+ */
+export const buildArgsObject = (
+  parameterNames: string[],
+  args: unknown[],
+): Record<string, unknown> | undefined => {
+  if (args.length === 0 && parameterNames.length === 0) {
+    return undefined;
+  }
+
+  const argsObject: Record<string, unknown> = {};
+
+  parameterNames.forEach((paramName, index) => {
+    if (index < args.length) {
+      argsObject[paramName] = args[index];
+    }
+  });
+
+  return argsObject;
+};
+
+/**
  * Returns a thunk that runs the bound method and applies sync/async lifecycle hooks.
  *
  * Kept as a thunk so async `onInvoke` can defer execution via `.then()`.
@@ -93,13 +122,13 @@ export const Effect = <R = unknown>(
  * `onReturn` or `onError` throw.
  */
 const attachHooks = <R>(
-  boundMethod: (...args: unknown[]) => unknown,
+  method: (...args: unknown[]) => unknown,
   args: unknown[],
   context: HookContext,
   hooks: EffectHooks<R>,
 ): (() => unknown) => () => {
   try {
-    const result = boundMethod(...args);
+    const result = method(...args);
 
     if (result instanceof Promise) {
       return chainAsyncHooks(result, context, hooks);
@@ -129,8 +158,8 @@ const attachHooks = <R>(
  * Resolves hooks from a static object or factory function.
  *
  * When `hooksOrFactory` is a function, it is called with the provided
- * decoration-time context to produce the hooks. Otherwise, the static
- * hooks are returned as-is.
+ * context to produce the hooks. Otherwise, the static hooks are returned
+ * as-is.
  */
 const resolveHooks = <R>(
   hooksOrFactory: HooksOrFactory<R>,

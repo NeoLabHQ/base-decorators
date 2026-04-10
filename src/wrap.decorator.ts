@@ -20,10 +20,10 @@ import type { WrapFn } from './hook.types';
  * present but `descriptor` is `undefined`).
  *
  * @typeParam R - The return type expected from the wrapper function
- * @param wrapFn       - Factory called once at decoration time with a
- *                        {@link WrapContext}. Returns the inner function that
- *                        receives the `this`-bound original method and an
- *                        {@link InvocationContext} on each call.
+ * @param wrapFn       - Factory called once on first invocation with the
+ *                        `this`-bound original method and a
+ *                        {@link WrapContext}. Returns the inner function
+ *                        that receives raw args on each call.
  * @param exclusionKey - Optional symbol used to mark the wrapped method. When
  *                        provided, this key is set instead of the default
  *                        `WRAP_APPLIED_KEY`. This allows different
@@ -36,17 +36,17 @@ import type { WrapFn } from './hook.types';
  * ```ts
  * // Method-level usage
  * class Service {
- *   \@Wrap((ctx) => (method, invCtx) => {
- *     console.log(`${invCtx.className}.${String(ctx.propertyKey)} called`);
- *     return method(...invCtx.args);
+ *   \@Wrap((method, ctx) => (...args) => {
+ *     console.log(`${ctx.className}.${String(ctx.propertyKey)} called`);
+ *     return method(...args);
  *   })
  *   doWork() { return 42; }
  * }
  *
  * // Class-level usage
- * \@Wrap((ctx) => (method, invCtx) => {
+ * \@Wrap((method, ctx) => (...args) => {
  *   console.log(`${String(ctx.propertyKey)} called`);
- *   return method(...invCtx.args);
+ *   return method(...args);
  * })
  * class AnotherService {
  *   methodA() { return 'a'; }

@@ -306,7 +306,7 @@ describe('Effect', () => {
   });
 
   describe('factory hook resolution', () => {
-    it('should call factory ONCE at decoration time, not per invocation', () => {
+    it('should call factory ONCE on first invocation, not per invocation', () => {
       const factorySpy = vi.fn(() => ({
         onReturn: ({ result }: { result: unknown }) => result,
       }));
@@ -318,8 +318,8 @@ describe('Effect', () => {
         }
       }
 
-      // Factory called at decoration time
-      expect(factorySpy).toHaveBeenCalledTimes(1);
+      // Factory NOT called at decoration time (lazy init)
+      expect(factorySpy).not.toHaveBeenCalled();
 
       const service = new TestService();
 
@@ -333,7 +333,7 @@ describe('Effect', () => {
       expect(factorySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should call factory once at decoration time, reuse for all instances', () => {
+    it('should call factory once on first invocation, reuse for all instances', () => {
       const factorySpy = vi.fn(() => ({
         onReturn: ({ result }: { result: unknown }) => result,
       }));
@@ -345,8 +345,8 @@ describe('Effect', () => {
         }
       }
 
-      // Factory called once at decoration time
-      expect(factorySpy).toHaveBeenCalledTimes(1);
+      // Factory NOT called at decoration time
+      expect(factorySpy).not.toHaveBeenCalled();
 
       const serviceA = new TestService();
       const serviceB = new TestService();
@@ -362,7 +362,7 @@ describe('Effect', () => {
       expect(factorySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should pass WrapContext fields to factory (propertyKey, parameterNames, descriptor)', () => {
+    it('should pass WrapContext fields to factory (propertyKey, parameterNames, descriptor, target, className)', () => {
       let receivedContext: Record<string, unknown> | undefined;
 
       const factory = (ctx: Record<string, unknown>) => {
@@ -378,37 +378,17 @@ describe('Effect', () => {
           return `${greeting} ${name}`;
         }
       }
-      void TestService;
 
-      // Factory called at decoration time
+      const service = new TestService();
+      service.greet('world', 'hi');
+
+      // Factory called on first invocation
       expect(receivedContext).toBeDefined();
       expect(receivedContext!['propertyKey']).toBe('greet');
       expect(receivedContext!['parameterNames']).toEqual(['name', 'greeting']);
       expect(receivedContext!['descriptor']).toBeDefined();
-    });
-
-    it('should NOT pass args, argsObject, target, or className to factory', () => {
-      let receivedContext: Record<string, unknown> | undefined;
-
-      const factory = (ctx: Record<string, unknown>) => {
-        receivedContext = ctx;
-        return {};
-      };
-
-      class TestService {
-        @Effect(factory as Parameters<typeof Effect>[0])
-        doWork(x: number) {
-          return x;
-        }
-      }
-      void TestService;
-
-      // Factory is called at decoration time, no runtime fields available
-      expect(receivedContext).toBeDefined();
-      expect(receivedContext!['args']).toBeUndefined();
-      expect(receivedContext!['argsObject']).toBeUndefined();
-      expect(receivedContext!['target']).toBeUndefined();
-      expect(receivedContext!['className']).toBeUndefined();
+      expect(receivedContext!['target']).toBe(service);
+      expect(receivedContext!['className']).toBe('TestService');
     });
 
     it('should pass full HookContext to each resolved hook per invocation', () => {
@@ -493,15 +473,14 @@ describe('Effect', () => {
         }
       }
 
-      // Factory called once per method at decoration time
-      // (WrapOnClass creates separate WrapOnMethod per method)
-      expect(factorySpy).toHaveBeenCalledTimes(2);
+      // Factory NOT called at decoration time (lazy init)
+      expect(factorySpy).not.toHaveBeenCalled();
 
       const service = new TestService();
       service.methodA();
       service.methodB();
 
-      // Still 2 (not called again per invocation)
+      // Factory called once per method on first invocation
       expect(factorySpy).toHaveBeenCalledTimes(2);
     });
   });
