@@ -1,5 +1,5 @@
 // Internal (not exported): wrap-on-class.ts
-export { WRAP_KEY, type WrapMethodOptions } from './wrap-on-method';
+export * from './wrap-on-method';
 export * from './wrap.decorator';
 export * from './effect.decorator';
 
@@ -11,3 +11,4 @@ export * from './on-invoke.hook';
 export * from './on-return.hook';
 export * from './on-error.hook';
 export * from './finally.hook';
+export * from './getParameterNames';
