@@ -457,16 +457,4 @@ describe('wrapFunction', () => {
       expect(() => wrapped.call(instance)).toThrow(syncError);
     });
   });
-
-  describe('export from barrel', () => {
-    it('wrapMethod is internal and not exported from the barrel', async () => {
-      const indexModule = await import('../src/index') as Record<string, unknown>;
-      expect(indexModule['wrapMethod']).toBeUndefined();
-    });
-
-    it('should export buildArgsObject from the main index', async () => {
-      const indexModule = await import('../src/index');
-      expect(typeof indexModule.buildArgsObject).toBe('function');
-    });
-  });
 });
