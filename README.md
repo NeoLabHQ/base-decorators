@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/LeoVS09/awesome-typescript/refs/heads/master/media/ts-favicon-96x96.png" width="96" alt="TypeScript Logo" />
+</p>
+
 <div align="center">
 
 <h1>TypeScript Base Decorators</h1>
